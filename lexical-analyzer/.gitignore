@@ -1,2 +1,6 @@
 *.o
 lexanc
+launch.json
+.vscode/
+lexanc.dSYM/
+*.DS_Store

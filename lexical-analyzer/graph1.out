@@ -1,0 +1,163 @@
+Started scanner test.
+tokentype:  0  which:    0             
+tokentype:  3  value:           program
+programtokentype:  5  type:     1 4.900000e+00
+tokentype:  3  value:              from
+fromtokentype:  3  value:            jensen
+jensentokentype:  0  which:    0             
+tokentype:  3  value:             wirth
+wirthtokentype:  0  which:    2            -
+tokentype:  0  which:    2            -
+tokentype:  3  value:              file
+filetokentype:  3  value:            graph1
+graph1tokentype:  0  which:   13            .
+tokentype:  3  value:               pas
+pastokentype:  0  which:    0             
+tokentype:  3  value:           program
+programtokentype:  3  value:            graph1
+graph1tokentype:  1  which:    4            (
+tokentype:  3  value:            output
+outputtokentype:  1  which:    5            )
+tokentype:  1  which:    2            ;
+tokentype:  3  value:             const
+consttokentype:  3  value:                 d
+dtokentype:  0  which:    6            =
+tokentype:  5  type:     1 6.250000e-02
+tokentype:  1  which:    2            ;
+tokentype:  0  which:    0             
+tokentype:  5  type:     0            1
+tokentype:  0  which:    4            /
+tokentype:  5  type:     0           16
+tokentype:  1  which:    1            ,
+tokentype:  5  type:     0           16
+tokentype:  3  value:             lines
+linestokentype:  3  value:               for
+fortokentype:  3  value:          interval
+intervaltokentype:  1  which:    6            [
+tokentype:  3  value:                 x
+xtokentype:  1  which:    1            ,
+tokentype:  3  value:                 x
+xtokentype:  0  which:    1            +
+tokentype:  5  type:     0            1
+tokentype:  1  which:    7            ]
+tokentype:  0  which:    0             
+tokentype:  3  value:                 s
+stokentype:  0  which:    6            =
+tokentype:  5  type:     0           32
+tokentype:  1  which:    2            ;
+tokentype:  0  which:    0             
+tokentype:  5  type:     0           32
+tokentype:  3  value:         character
+charactertokentype:  3  value:            widths
+widthstokentype:  3  value:               for
+fortokentype:  3  value:          interval
+intervaltokentype:  1  which:    6            [
+tokentype:  3  value:                 y
+ytokentype:  1  which:    1            ,
+tokentype:  3  value:                 y
+ytokentype:  0  which:    1            +
+tokentype:  5  type:     0            1
+tokentype:  1  which:    7            ]
+tokentype:  0  which:    0             
+tokentype:  3  value:                 h
+htokentype:  0  which:    6            =
+tokentype:  5  type:     0           34
+tokentype:  1  which:    2            ;
+tokentype:  0  which:    0             
+tokentype:  3  value:         character
+charactertokentype:  3  value:          position
+positiontokentype:  3  value:                of
+oftokentype:  3  value:                 x
+xtokentype:  0  which:    2            -
+tokentype:  3  value:              axis
+axistokentype:  0  which:    0             
+tokentype:  3  value:                 c
+ctokentype:  0  which:    6            =
+tokentype:  5  type:     1 6.283180e+00
+tokentype:  1  which:    2            ;
+tokentype:  0  which:    0             
+tokentype:  5  type:     0            2
+tokentype:  0  which:    3            *
+tokentype:  3  value:                pi
+pitokentype:  0  which:    0             
+tokentype:  3  value:               lim
+limtokentype:  0  which:    6            =
+tokentype:  5  type:     0           32
+tokentype:  1  which:    2            ;
+tokentype:  3  value:               var
+vartokentype:  3  value:                 x
+xtokentype:  1  which:    1            ,
+tokentype:  3  value:                 y
+ytokentype:  1  which:    3            :
+tokentype:  3  value:              real
+realtokentype:  1  which:    2            ;
+tokentype:  3  value:                 i
+itokentype:  1  which:    1            ,
+tokentype:  3  value:                 n
+ntokentype:  1  which:    3            :
+tokentype:  3  value:           integer
+integertokentype:  1  which:    2            ;
+tokentype:  3  value:             begin
+begintokentype:  3  value:               for
+fortokentype:  3  value:                 i
+itokentype:  0  which:    5           :=
+tokentype:  5  type:     0            0
+tokentype:  3  value:                to
+totokentype:  3  value:               lim
+limtokentype:  3  value:                do
+dotokentype:  3  value:             begin
+begintokentype:  3  value:                 x
+xtokentype:  0  which:    5           :=
+tokentype:  3  value:                 d
+dtokentype:  0  which:    3            *
+tokentype:  3  value:                 i
+itokentype:  1  which:    2            ;
+tokentype:  3  value:                 y
+ytokentype:  0  which:    5           :=
+tokentype:  3  value:               exp
+exptokentype:  1  which:    4            (
+tokentype:  0  which:    2            -
+tokentype:  3  value:                 x
+xtokentype:  1  which:    5            )
+tokentype:  0  which:    3            *
+tokentype:  3  value:               sin
+sintokentype:  1  which:    4            (
+tokentype:  3  value:                 c
+ctokentype:  0  which:    3            *
+tokentype:  3  value:                 x
+xtokentype:  1  which:    5            )
+tokentype:  1  which:    2            ;
+tokentype:  3  value:                 n
+ntokentype:  0  which:    5           :=
+tokentype:  3  value:             round
+roundtokentype:  1  which:    4            (
+tokentype:  3  value:                 s
+stokentype:  0  which:    3            *
+tokentype:  3  value:                 y
+ytokentype:  1  which:    5            )
+tokentype:  0  which:    1            +
+tokentype:  3  value:                 h
+htokentype:  1  which:    2            ;
+tokentype:  3  value:            repeat
+repeattokentype:  3  value:             write
+writetokentype:  1  which:    4            (
+tokentype:  4  value:                  
+ tokentype:  1  which:    5            )
+tokentype:  1  which:    2            ;
+tokentype:  3  value:                 n
+ntokentype:  0  which:    5           :=
+tokentype:  3  value:                 n
+ntokentype:  0  which:    2            -
+tokentype:  5  type:     0            1
+tokentype:  3  value:             until
+untiltokentype:  3  value:                 n
+ntokentype:  0  which:    6            =
+tokentype:  5  type:     0            0
+tokentype:  1  which:    2            ;
+tokentype:  3  value:           writeln
+writelntokentype:  1  which:    4            (
+tokentype:  4  value:                 *
+*tokentype:  1  which:    5            )
+tokentype:  3  value:               end
+endtokentype:  3  value:               end
+endtokentype:  0  which:   13            .

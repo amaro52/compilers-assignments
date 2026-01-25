@@ -110,15 +110,15 @@ TOKEN identifier(TOKEN tok) {
             i = i + 1;
         }
     }
-    tok->stringval[i] = '\0';
+    tok->stringval[i] = '\0';  // end the string
 
     // check if tok is an operator or reserved word
     if (get_reserved_word(tok, OPERATOR, reserved_words_operators) ||
         get_reserved_word(tok, RESERVED, reserved_words)) {
         return tok;  // tok is either operator or reserved word
+    } else {
+        tok->tokentype = IDENTIFIERTOK;  // tok is neither operator nor reserved word
     }
-
-    tok->tokentype = IDENTIFIERTOK;  // tok is neither operator nor reserved word
 
     return (tok);
 }
@@ -258,9 +258,6 @@ TOKEN special(TOKEN tok) {
             tok->tokentype = DELIMITER;
             tok->whichval = RBRACKET - DELIMITER_BIAS;
             break;
-
-        default:
-            printf("Unrecognized special character: %c\n", c);
     }
 
     return (tok);
