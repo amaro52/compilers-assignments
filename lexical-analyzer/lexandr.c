@@ -5,7 +5,7 @@
 /* Copyright (c) 2012 Gordon S. Novak Jr. and
    The University of Texas at Austin. */
 
-/* 
+/*
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
@@ -29,27 +29,26 @@ or:
    2. lexanc <graph1.pas
                    */
 
-#include <stdio.h>
 #include <ctype.h>
-#include "token.h"
+#include <stdio.h>
+
 #include "lexan.h"
+#include "token.h"
 
 extern int EOFFLG;
 
-void testscanner()
-  { TOKEN tok;
-    while (EOFFLG == 0)
-      {
+void testscanner() {
+    TOKEN tok;
+    while (EOFFLG == 0) {
         tok = gettoken();
         if (EOFFLG == 0) printtoken(tok);
-      }
-  }
+    }
+}
 
 /*          main for testing    */
-int main()
-   {   
-       initscanner();
-       init_charclass();                    /* init the scanner */
-       printf("Started scanner test.\n");
-       testscanner();
-   }
+int main() {
+    initscanner();
+    init_charclass(); /* init the scanner */
+    printf("Started scanner test.\n");
+    testscanner();
+}

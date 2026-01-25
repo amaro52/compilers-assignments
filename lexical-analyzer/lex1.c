@@ -21,11 +21,12 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include <stdio.h>
 #include <ctype.h>
+#include <stdio.h>
 #include <string.h>
-#include "token.h"
+
 #include "lexan.h"
+#include "token.h"
 
 extern int CHARCLASS[];
 
@@ -37,41 +38,30 @@ extern int CHARCLASS[];
    */
 
 /* Skip blanks and whitespace.  Expand this function to skip comments too. */
-void skipblanks ()
-  {
-      int c;
-      while ((c = peekchar()) != EOF
-             && (c == ' ' || c == '\n' || c == '\t'))
-          getchar();
-    }
+void skipblanks() {
+    int c;
+    while ((c = peekchar()) != EOF && (c == ' ' || c == '\n' || c == '\t')) getchar();
+}
 
 /* Get identifiers and reserved words */
-TOKEN identifier (TOKEN tok)
-  {
-    }
+TOKEN identifier(TOKEN tok) {}
 
-TOKEN getstring (TOKEN tok)
-  {
-    }
+TOKEN getstring(TOKEN tok) {}
 
-TOKEN special (TOKEN tok)
-  {
-    }
+TOKEN special(TOKEN tok) {}
 
 /* Get and convert unsigned numbers of all types. */
-TOKEN number (TOKEN tok)
-  { long num;
-    int  c, charval;
+TOKEN number(TOKEN tok) {
+    long num;
+    int c, charval;
     num = 0;
-    while ( (c = peekchar()) != EOF
-            && CHARCLASS[c] == NUMERIC)
-      {   c = getchar();
-          charval = (c - '0');
-          num = num * 10 + charval;
-        }
+    while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
+        c = getchar();
+        charval = (c - '0');
+        num = num * 10 + charval;
+    }
     tok->tokentype = NUMBERTOK;
     tok->basicdt = INTEGER;
     tok->intval = num;
     return (tok);
-  }
-
+}
