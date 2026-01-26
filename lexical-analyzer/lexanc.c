@@ -68,6 +68,8 @@ static ReservedWord reserved_words[] = {
     {"repeat", REPEAT - RESERVED_BIAS},
     {"set", SET - RESERVED_BIAS},
     {"then", THEN - RESERVED_BIAS},
+    {"to", TO - RESERVED_BIAS},
+    {"type", TYPE - RESERVED_BIAS},
     {"while", WHILE - RESERVED_BIAS},
     {"var", VAR - RESERVED_BIAS},
     {"until", UNTIL - RESERVED_BIAS},
@@ -75,17 +77,62 @@ static ReservedWord reserved_words[] = {
     // ... add the rest from your token.h file
 };
 
+#define RESERVED_OPERATORS_LENGTH (sizeof(reserved_words_operators) / sizeof(ReservedWord))
+#define RESERVED_WORDS_LENGTH (sizeof(reserved_words) / sizeof(ReservedWord))
+
 /* Skip blanks and whitespace.  Expand this function to skip comments too. */
 void skipblanks() {
     int c;
-    while ((c = peekchar()) != EOF && (c == ' ' || c == '\n' || c == '\t')) getchar();
+    int scanning = 1;  // flag to keep the loop going
+
+    while (scanning) {
+        c = peekchar();
+
+        if (c == EOF) {
+            scanning = 0;
+        }
+
+        // handle standard whitespace characters
+        else if (c == ' ' || c == '\n' || c == '\t') {
+            getchar();  // Consume the character
+        }
+        // handle curly brace comments { ... }
+        else if (c == '{') {
+            getchar();                                   // skip '{'
+            while ((c = getchar()) != EOF && c != '}');  // skip characters until we hit '}' or EOF
+        }
+
+        // handle parentheses-star comments (* ... *)
+        else if (c == '(' && peek2char() == '*') {
+            getchar();  // skip '('
+            getchar();  // skip '*'
+
+            // loop until we find a '*' followed by a ')'
+            while ((c = getchar()) != EOF) {
+                if (c == '*' && peekchar() == ')') {
+                    getchar();  // skip the closing ')'
+                    break;
+                }
+            }
+        } else {
+            scanning = 0;  // not a whitespace or comment
+        }
+    }
 }
 
 /* Returns token with its assigned tokentype and whichval if token is an
    operator or a reserved word */
 TOKEN get_reserved_word(TOKEN tok, int type, ReservedWord* table) {
-    int reserved_words_length = sizeof(*table) / sizeof(ReservedWord);
-    for (int i = 0; i < reserved_words_length; i++) {
+    // assign table length based on type of reserved word
+    int table_length;
+    if (type == OPERATOR) {
+        table_length = RESERVED_OPERATORS_LENGTH;
+    } else if (type == RESERVED) {
+        table_length = RESERVED_WORDS_LENGTH;
+    }
+
+    // search through the reserved word table
+    for (int i = 0; i < table_length; i++) {
         if (strcmp(tok->stringval, table[i].word) == 0) {
             tok->tokentype = type;
             tok->whichval = table[i].number;
@@ -127,7 +174,7 @@ TOKEN getstring(TOKEN tok) {
     int c, i;
     i = 0;
     getchar();  // move cursor over opening quote
-    while ((c = peekchar()) != EOF && c != '\'') {
+    while ((c = peekchar()) != EOF && c != '\'' && i < 15) {
         c = getchar();
 
         if (c == '\'' && peekchar() == '\'') {  // handle doubled quotes

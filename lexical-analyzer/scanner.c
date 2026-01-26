@@ -71,20 +71,30 @@ void init_charclass() /* initialize character class array */
    This is the interface from the parser to the lexical analyzer. */
 TOKEN gettoken() {
     int c, cclass;
-    TOKEN tok = (TOKEN)talloc(); /* = new token */
-    skipblanks();                /* and comments */
-    if ((c = peekchar()) != EOF) {
-        cclass = CHARCLASS[c];
-        if (cclass == ALPHA)
-            identifier(tok);
-        else if (cclass == NUMERIC)
-            number(tok);
-        else if (c == '\'')
-            getstring(tok);
-        else
-            special(tok);
-    } else
+    skipblanks(); /* and comments */
+
+    // check if we are at the end of the file before making a token
+    if ((c = peekchar()) == EOF) {
         EOFFLG = 1;
-    if (DEBUGGETTOKEN != 0) printtoken(tok);
+        return NULL;
+    }
+
+    TOKEN tok = (TOKEN)talloc(); /* = new token */
+    cclass = CHARCLASS[c];
+
+    if (cclass == ALPHA)
+        identifier(tok);
+    else if (cclass == NUMERIC)
+        number(tok);
+    else if (c == '\'')
+        getstring(tok);
+    else
+        special(tok);
+
+    // debug
+    // if (DEBUGGETTOKEN == 0) {
+    //     printtoken(tok);
+    // }
+
     return (tok);
 }

@@ -1,0 +1,110 @@
+Started scanner test.
+tokentype:  3  value:   thisisanunusual
+tokentype:  1  which:    2            ;
+tokentype:  4  value:    What the #&*%!
+tokentype:  4  value:               Don
+tokentype:  4  value:          t forget
+tokentype:  4  value:   Maximum of 15 c
+tokentype:  3  value:                 x
+tokentype:  0  which:    5           :=
+tokentype:  5  type:     0          123
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0    123456789
+tokentype:  1  which:    2            ;
+tokentype:  3  value:                 u
+tokentype:  3  value:                 v
+tokentype:  3  value:                 w
+tokentype:  3  value:                 x
+tokentype:  3  value:                 y
+tokentype:  3  value:                 z
+tokentype:  5  type:     0   1234567890
+tokentype:  5  type:     0   2147483647
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0            7
+tokentype:  1  which:    2            ;
+tokentype:  5  type:     0  -2147483648
+tokentype:  5  type:     0   1569325072
+tokentype:  0  which:    2            -
+tokentype:  3  value:                 x
+tokentype:  1  which:    2            ;
+tokentype:  5  type:     0            1
+tokentype:  3  value:                e3
+tokentype:  5  type:     0            1
+tokentype:  3  value:                e9
+tokentype:  5  type:     0            2
+tokentype:  3  value:                e9
+tokentype:  5  type:     0            3
+tokentype:  3  value:                e9
+tokentype:  5  type:     0            1
+tokentype:  3  value:                 e
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0           10
+tokentype:  5  type:     1 3.140000e+00
+tokentype:  5  type:     1 1.000000e+00
+tokentype:  0  which:   13            .
+tokentype:  5  type:     0           10
+tokentype:  5  type:     1 3.141590e+00
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  5  type:     1 3.141593e+06
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  5  type:     1 3.141593e-01
+tokentype:  3  value:                e1
+tokentype:  5  type:     1 3.141593e-01
+tokentype:  3  value:                 e
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0            1
+tokentype:  5  type:     1 3.141593e+01
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0            1
+tokentype:  5  type:     1 3.141593e+01
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0            1
+tokentype:  5  type:     1 3.141593e-10
+tokentype:  3  value:                 e
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0           10
+tokentype:  5  type:     1 3.141593e-30
+tokentype:  3  value:                 e
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0           30
+tokentype:  5  type:     1 3.141593e-60
+tokentype:  3  value:                 e
+tokentype:  0  which:    1            +
+tokentype:  5  type:     0           60
+tokentype:  5  type:     1 3.141593e+08
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0            8
+tokentype:  5  type:     1 3.141593e+10
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0           10
+tokentype:  5  type:     1 3.141593e+24
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0           24
+tokentype:  5  type:     1 3.141593e+54
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0           54
+tokentype:  5  type:     1 3.141593e+23
+tokentype:  5  type:     1 3.141593e-30
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0           37
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  3  value:                 e
+tokentype:  0  which:    2            -
+tokentype:  5  type:     0           40
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  3  value:               e37
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  3  value:               e39
+tokentype:  5  type:     1 3.141593e+00
+tokentype:  3  value:   e31415926535897

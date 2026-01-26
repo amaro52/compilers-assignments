@@ -38,8 +38,8 @@ static char* resprnt[] = {" ",   "array",  "begin",     "case",     "const",  "d
                           "of",  "packed", "procedure", "program",  "record", "repeat", "set",    "then",
                           "to",  "type",   "until",     "var",      "while",  "with"};
 
-TOKEN talloc() /* allocate a new token record */
-{
+/* allocate a new token record */
+TOKEN talloc() {
     TOKEN tok;
     tok = (TOKEN)calloc(1, sizeof(struct tokn));
     if (tok != NULL)
@@ -62,7 +62,6 @@ void printtoken(TOKEN tok) {
         case IDENTIFIERTOK:
         case STRINGTOK:
             printf("tokentype: %2d  value:  %16s\n", tok->tokentype, tok->stringval);
-            printf(tok->stringval);
             break;
         case NUMBERTOK:
             switch (tok->basicdt) {
