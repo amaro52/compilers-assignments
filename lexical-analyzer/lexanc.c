@@ -1,7 +1,4 @@
-/* lex1.c         14 Feb 01; 31 May 12; 11 Jan 18; 20 Jan 24       */
-
-/* This file contains code stubs for the lexical analyzer.
-   Rename this file to be lexanc.c and fill in the stubs.    */
+/* lexanc.c */
 
 /* Copyright (c) 2024 Gordon S. Novak Jr. and
    The University of Texas at Austin. */
@@ -81,6 +78,8 @@ static ReservedWord reserved_words[] = {
 
 #define RESERVED_OPERATORS_LENGTH (sizeof(reserved_words_operators) / sizeof(ReservedWord))
 #define RESERVED_WORDS_LENGTH (sizeof(reserved_words) / sizeof(ReservedWord))
+#define UPPER_FLOAT_LIMIT 1e38
+#define LOWER_FLOAT_LIMIT 1e-38
 
 /* Skip blanks and whitespace.  Expand this function to skip comments too. */
 void skipblanks() {
@@ -172,6 +171,7 @@ TOKEN identifier(TOKEN tok) {
     return (tok);
 }
 
+/* store first 15 characters of a string */
 TOKEN getstring(TOKEN tok) {
     int c, i;
     i = 0;
@@ -322,35 +322,46 @@ TOKEN special(TOKEN tok) {
 
 /* Get and convert unsigned numbers of all types. */
 TOKEN number(TOKEN tok) {
-    double num = 0.0;
+    double real_val = 0.0;
+    long long int_val = 0;  // use long long to check for overflow
+    int int_overflow = 0;   // flag to indicate if integer overflow occurred
     int c, charval;
-    int is_real = 0;
+    int is_real = 0;  // flag to indicate if number is real
 
+    // process integer part
     while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
         c = getchar();
 
         charval = (c - '0');
-        num = num * 10.0 + charval;
+        real_val = real_val * 10.0 + charval;
+
+        if (!int_overflow) {
+            // check if adding this digit exceeds __INT_MAX__
+            if (int_val > (__INT_MAX__ - charval) / 10) {
+                int_overflow = 1;
+            } else {
+                int_val = int_val * 10 + charval;
+            }
+        }
     }
 
     // handle case for a decimal point (real number)
     // avoid cases like '..'
-    if (peekchar() == '.' && CHARCLASS[peek2char()] == NUMERIC) {
-        getchar();  // move over the '.'
+    c = peekchar();
+    if (c == '.' && CHARCLASS[peek2char()] == NUMERIC) {
+        getchar();    // move over the '.'
+        is_real = 1;  // non-integer, so mark as real number
 
-        // process fractional part
         double divisor = 1.0;
         double fraction = 0.0;
         while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
             c = getchar();
-
             charval = (c - '0');
+
             fraction = fraction * 10.0 + charval;
             divisor *= 10.0;
         }
-        num = num + (fraction / divisor);  // one division to maintain precision
-
-        is_real = 1;  // mark as real number
+        real_val = real_val + (fraction / divisor);  // 1 division to maintain precision
     }
 
     // handle scienfitic notation
@@ -362,8 +373,7 @@ TOKEN number(TOKEN tok) {
         int sign = 1;
         int exponent = 0;
 
-        // check for sign
-        c = peekchar();
+        c = peekchar();  // check for sign
         if (c == '+' || c == '-') {
             getchar();  // move over sign
             if (c == '-') {
@@ -374,14 +384,10 @@ TOKEN number(TOKEN tok) {
         // read exponent digits
         while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
             c = getchar();
-
             charval = (c - '0');
             exponent = exponent * 10.0 + charval;
         }
-
-        // apply exponent math
-        double base = 10.0;
-        num = num * pow(base, (double)(sign * exponent));
+        real_val = real_val * pow(10.0, (double)(sign * exponent));  // apply exponent math
     }
 
     tok->tokentype = NUMBERTOK;
@@ -390,30 +396,19 @@ TOKEN number(TOKEN tok) {
     if (is_real) {
         tok->basicdt = REAL;
 
-        // float overflow check
-        if (is_real) {
-            tok->basicdt = REAL;
-
-            double float_limits[] = {1e38, 1e-38};
-
-            if (num > float_limits[0] || (num > 0 && num < float_limits[1])) {
-                printf("Floating number out of range\n");
-                tok->realval = 0.0;
-            } else {
-                tok->realval = num;
-            }
+        if (real_val > UPPER_FLOAT_LIMIT || (real_val > 0 && real_val < LOWER_FLOAT_LIMIT)) {
+            printf("Floating number out of range\n");
+            tok->realval = 0.0;
         } else {
-            tok->realval = num;
+            tok->realval = real_val;
         }
     } else {
         tok->basicdt = INTEGER;
-
-        // integer overflow check
-        if (num > 2147483647.0) {
+        if (int_overflow) {
             printf("Integer number out of range\n");
-            tok->intval = (int)(long long)num;
+            tok->intval = (int)int_val;  // returns the frozen prefix
         } else {
-            tok->intval = (int)num;
+            tok->intval = (int)int_val;
         }
     }
 

@@ -22,9 +22,9 @@ tokentype:  0  which:    2            -
 tokentype:  5  type:     0            7
 tokentype:  1  which:    2            ;
 Integer number out of range
-tokentype:  5  type:     0  -2147483648
+tokentype:  5  type:     0    214748364
 Integer number out of range
-tokentype:  5  type:     0   1569325072
+tokentype:  5  type:     0    999999999
 tokentype:  0  which:    2            -
 tokentype:  3  value:                 x
 tokentype:  1  which:    2            ;
