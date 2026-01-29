@@ -22,6 +22,8 @@
 */
 
 #include <ctype.h>
+#include <limits.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -174,11 +176,15 @@ TOKEN getstring(TOKEN tok) {
     int c, i;
     i = 0;
     getchar();  // move cursor over opening quote
-    while ((c = peekchar()) != EOF && c != '\'' && i < 15) {
+    while ((c = peekchar()) != EOF && i < 15) {
         c = getchar();
 
-        if (c == '\'' && peekchar() == '\'') {  // handle doubled quotes
-            c = getchar();                      // get second quote
+        if (c == '\'') {
+            if (peekchar() == '\'') {  // handle doubled quotes
+                c = getchar();         // get second quote
+            } else {
+                break;  // end of string
+            }
         }
 
         if (i < 15) {
@@ -186,7 +192,11 @@ TOKEN getstring(TOKEN tok) {
             i = i + 1;
         }
     }
-    getchar();  // move cursor over closing quote
+
+    // move cursor to end of string if it was truncated
+    while (c != EOF && c != '\'') {
+        c = getchar();
+    }
 
     tok->stringval[i] = '\0';
     tok->tokentype = STRINGTOK;
@@ -312,9 +322,10 @@ TOKEN special(TOKEN tok) {
 
 /* Get and convert unsigned numbers of all types. */
 TOKEN number(TOKEN tok) {
-    double num;
+    double num = 0.0;
     int c, charval;
-    num = 0;
+    int is_real = 0;
+
     while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
         c = getchar();
 
@@ -322,8 +333,9 @@ TOKEN number(TOKEN tok) {
         num = num * 10 + charval;
     }
 
-    // check for a decimal point
-    if (peekchar() == '.') {
+    // check for a decimal point (real number)
+    // avoid cases like '..'
+    if (peekchar() == '.' && CHARCLASS[peek2char()] == NUMERIC) {
         getchar();  // move over the '.'
 
         double weight = 0.1;
@@ -337,14 +349,65 @@ TOKEN number(TOKEN tok) {
             weight /= 10.0;
         }
 
-        tok->basicdt = REAL;
-        tok->realval = num;
-    } else {
-        // standard integer
-        tok->basicdt = INTEGER;
-        tok->intval = (long)num;
+        is_real = 1;  // mark as real number
     }
+
+    // handle scienfitic notation
+    c = peekchar();  // consume 'e' or 'E'
+    if (c == 'e' || c == 'E') {
+        getchar();  // move over 'e' or 'E'
+        is_real = 1;
+
+        int sign = 1;
+        int exponent = 0;
+
+        // check for sign
+        c = peekchar();
+        if (c == '+' || c == '-') {
+            getchar();  // move over sign
+            if (c == '-') {
+                sign = -1;
+            }
+        }
+
+        // read exponent digits
+        while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
+            c = getchar();
+
+            charval = (c - '0');
+            exponent = exponent * 10 + charval;
+        }
+
+        // apply exponent math
+        int base = 10.0;
+        num = num * pow(base, sign * exponent);
+    }
+
     tok->tokentype = NUMBERTOK;
+
+    // assign number type and value
+    if (is_real) {
+        tok->basicdt = REAL;
+
+        // float overflow check
+
+        if (isinf(num)) {  // num is effectively infinity
+            printf("Floating number out of range\n");
+            tok->realval = 0.0;  // assign a default value
+        } else {
+            tok->realval = num;
+        }
+    } else {
+        tok->basicdt = INTEGER;
+
+        // integer overflow check
+        if (num > INT_MAX) {
+            printf("Integer number out of range\n");
+            tok->intval = INT_MAX;
+        } else {
+            tok->intval = (int)num;
+        }
+    }
 
     return (tok);
 }
