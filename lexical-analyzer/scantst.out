@@ -22,9 +22,9 @@ tokentype:  0  which:    2            -
 tokentype:  5  type:     0            7
 tokentype:  1  which:    2            ;
 Integer number out of range
-tokentype:  5  type:     0   2147483647
+tokentype:  5  type:     0  -2147483648
 Integer number out of range
-tokentype:  5  type:     0   2147483647
+tokentype:  5  type:     0   1569325072
 tokentype:  0  which:    2            -
 tokentype:  3  value:                 x
 tokentype:  1  which:    2            ;
@@ -58,7 +58,10 @@ tokentype:  5  type:     1 3.141593e+00
 tokentype:  5  type:     1 3.141593e+23
 tokentype:  5  type:     1 3.141593e-30
 tokentype:  5  type:     1 3.141593e-37
-tokentype:  5  type:     1 3.141593e-40
+Floating number out of range
+tokentype:  5  type:     1 0.000000e+00
 tokentype:  5  type:     1 3.141593e+37
-tokentype:  5  type:     1 3.141593e+39
+Floating number out of range
+tokentype:  5  type:     1 0.000000e+00
+Floating number out of range
 tokentype:  5  type:     1 0.000000e+00

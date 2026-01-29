@@ -330,24 +330,25 @@ TOKEN number(TOKEN tok) {
         c = getchar();
 
         charval = (c - '0');
-        num = num * 10 + charval;
+        num = num * 10.0 + charval;
     }
 
-    // check for a decimal point (real number)
+    // handle case for a decimal point (real number)
     // avoid cases like '..'
     if (peekchar() == '.' && CHARCLASS[peek2char()] == NUMERIC) {
         getchar();  // move over the '.'
 
-        double weight = 0.1;
-
         // process fractional part
+        double divisor = 1.0;
+        double fraction = 0.0;
         while ((c = peekchar()) != EOF && CHARCLASS[c] == NUMERIC) {
             c = getchar();
 
             charval = (c - '0');
-            num = num + charval * weight;
-            weight /= 10.0;
+            fraction = fraction * 10.0 + charval;
+            divisor *= 10.0;
         }
+        num = num + (fraction / divisor);  // one division to maintain precision
 
         is_real = 1;  // mark as real number
     }
@@ -375,12 +376,12 @@ TOKEN number(TOKEN tok) {
             c = getchar();
 
             charval = (c - '0');
-            exponent = exponent * 10 + charval;
+            exponent = exponent * 10.0 + charval;
         }
 
         // apply exponent math
-        int base = 10.0;
-        num = num * pow(base, sign * exponent);
+        double base = 10.0;
+        num = num * pow(base, (double)(sign * exponent));
     }
 
     tok->tokentype = NUMBERTOK;
@@ -390,10 +391,17 @@ TOKEN number(TOKEN tok) {
         tok->basicdt = REAL;
 
         // float overflow check
+        if (is_real) {
+            tok->basicdt = REAL;
 
-        if (isinf(num)) {  // num is effectively infinity
-            printf("Floating number out of range\n");
-            tok->realval = 0.0;  // assign a default value
+            double float_limits[] = {1e38, 1e-38};
+
+            if (num > float_limits[0] || (num > 0 && num < float_limits[1])) {
+                printf("Floating number out of range\n");
+                tok->realval = 0.0;
+            } else {
+                tok->realval = num;
+            }
         } else {
             tok->realval = num;
         }
@@ -401,9 +409,9 @@ TOKEN number(TOKEN tok) {
         tok->basicdt = INTEGER;
 
         // integer overflow check
-        if (num > INT_MAX) {
+        if (num > 2147483647.0) {
             printf("Integer number out of range\n");
-            tok->intval = INT_MAX;
+            tok->intval = (int)(long long)num;
         } else {
             tok->intval = (int)num;
         }
