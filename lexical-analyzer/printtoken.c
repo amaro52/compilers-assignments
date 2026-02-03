@@ -46,6 +46,8 @@ TOKEN talloc() {
         return (tok);
     else
         printf("talloc failed.");
+
+    return 0;
 }
 
 void printtoken(TOKEN tok) {

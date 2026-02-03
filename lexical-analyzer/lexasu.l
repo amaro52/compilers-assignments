@@ -47,8 +47,8 @@ else     { return(ELSE); }
 
 %%       /* C functions */
 
-int install_id() {  printf("id  %10s   n = %4d\n",yytext,yyleng);  }
+int install_id() {  printf("id  %10s   n = %zu\n",yytext,yyleng); return 0;  }
 
-int install_num() {  printf("num %10s   n = %4d\n",yytext,yyleng);  }
+int install_num() {  printf("num %10s   n = %zu\n",yytext,yyleng); return 0;  }
 
 int yywrap() {  return(1);  }   /* lex seems to need this. */
