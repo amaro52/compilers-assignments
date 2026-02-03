@@ -41,6 +41,7 @@ int maketoken(int type, int which);
 int install_id();
 int install_int();
 int install_fnum();
+int install_string();
 int yywrap();
 
 /* If the lex yytext buffer turns out to be too small to hold comments,
@@ -64,12 +65,16 @@ digit    [0-9]
 id       {letter}({letter}|{digit})*
 int      {digit}+
 fnumber  {digit}+(\.{digit}+)?([eE][+\-]?{digit}+)?
+%x COMMENT
 
 %%
 
-{ws}      { /* no action and no return */ }
-"{"[^}]*"}"             { /* skip curly brace comments */ }
-"(*"([^*]|"*"[^)])*"*)" { /* skip (* ... *) comments */ }
+{ws}            { /* no action and no return */ }
+"{"[^}]*"}"     { /* skip curly brace comments */ }
+"(*"            { BEGIN(COMMENT); }
+<COMMENT>"*)"   { BEGIN(INITIAL); }
+<COMMENT>\n     { /* ignore */ }
+<COMMENT>.      { /* ignore */ }
 
 array     {return(maketoken(RESERVED, ARRAY));}
 begin     {return(maketoken(RESERVED, BEGINBEGIN));}
@@ -109,7 +114,7 @@ mod       {return(maketoken(OPERATOR, MOD));}
 in        {return(maketoken(OPERATOR, IN));} 
 
 {id}      {return(install_id());}
-{int}    { return(install_int()); }
+{int}     {return(install_int()); }
 {fnumber} {return(install_fnum());}
 
 "+"       {return(maketoken(OPERATOR, PLUS));}
@@ -127,14 +132,15 @@ in        {return(maketoken(OPERATOR, IN));}
 "."       {return(maketoken(OPERATOR, DOT));}
  
 
-","       {return(maketoken(DELIMITER, COMMA));}
-";"       {return(maketoken(DELIMITER, SEMICOLON));}
-":"       {return(maketoken(DELIMITER, COLON));}
-"("       {return(maketoken(DELIMITER, LPAREN));}
-")"       {return(maketoken(DELIMITER, RPAREN));}
-"["       {return(maketoken(DELIMITER, LBRACKET));}
-"]"       {return(maketoken(DELIMITER, RBRACKET));}
-".."      {return(maketoken(DELIMITER, DOTDOT));}
+","             {return(maketoken(DELIMITER, COMMA));}
+";"             {return(maketoken(DELIMITER, SEMICOLON));}
+":"             {return(maketoken(DELIMITER, COLON));}
+"("             {return(maketoken(DELIMITER, LPAREN));}
+")"             {return(maketoken(DELIMITER, RPAREN));}
+"["             {return(maketoken(DELIMITER, LBRACKET));}
+"]"             {return(maketoken(DELIMITER, RBRACKET));}
+".."            {return(maketoken(DELIMITER, DOTDOT));}
+'([^']|'')*'    {return(install_string()); }
 
 %%
 
@@ -207,3 +213,22 @@ int install_fnum() {
 }
 
 int yywrap() {  return(1);  }       /* lex may need this. */
+
+/* Handle Pascal strings */
+int install_string() {
+    int i, j = 0;
+    yylval = talloc();
+    yylval->tokentype = STRINGTOK;
+    
+    for (i = 1; i < yyleng - 1 && j < 15; i++) {
+        if (yytext[i] == '\'' && yytext[i+1] == '\'') {
+            yylval->stringval[j++] = '\'';
+            i++; /* skip second quote */
+        } else {
+            yylval->stringval[j++] = yytext[i];
+        }
+    }
+    yylval->stringval[j] = '\0';
+    
+    return(STRINGTOK);
+}
