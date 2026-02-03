@@ -151,7 +151,7 @@ in        {return(maketoken(OPERATOR, IN));}
 
 /* Make simple tokens. */
 int maketoken(int type, int which) {
-    yylval = talloc();  /* Make new token, set yylval to point to it */
+    yylval = talloc();  /* make new token, set yylval to point to it */
     yylval->tokentype = type;
     if (type == RESERVED)
         yylval->whichval = which - RESERVED_BIAS;
@@ -165,9 +165,10 @@ int maketoken(int type, int which) {
   return(which);
 }
 
+/* Handle case for identifiers */
 int install_id()
  { int i, c, n;
-    yylval = talloc();  /* Make new token, set yylval to point to it */
+    yylval = talloc();  /* make new token, set yylval to point to it */
     yylval->tokentype = IDENTIFIERTOK;
     n = yyleng;            /* number of characters */
     
@@ -200,7 +201,7 @@ int install_int() {
 /* Handle case for floats */
 int install_fnum() {  
     float fnum;
-    yylval = talloc();   /* Make new token, set yylval to point to it */
+    yylval = talloc();   /* make new token, set yylval to point to it */
     
     yylval->tokentype = NUMBERTOK;
     yylval->basicdt = REAL;
