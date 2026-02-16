@@ -4,6 +4,7 @@
 
 /* You may use the function headers below if you wish, or you may
    replace them if you wish.  */
+#include "symtab.h"
 #include "token.h"
 
 /* cons links a new item onto the front of a list.  Equivalent to a push.
