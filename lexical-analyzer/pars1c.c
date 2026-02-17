@@ -280,7 +280,6 @@ TOKEN findid(TOKEN tok) {
 
     if (s == NULL) {
         return tok;  // not found => undeclared variable => return token as is
-        // TODO: check if need to return error
     }
 
     tok->symentry = s;  // attach symbol table entry to token
@@ -388,6 +387,7 @@ TOKEN parsebegin(TOKEN keytok) {
         else if (tok->tokentype != DELIMITER || (tok->whichval + DELIMITER_BIAS) != SEMICOLON)
             yyerror("Bad item in begin - end.");
     };
+
     return (makeprogn(keytok, front));
 }
 
@@ -406,6 +406,7 @@ TOKEN parseif(TOKEN keytok) {
         tok = gettok(); /* consume the ELSE */
         elsepart = statement();
     };
+
     return (makeif(keytok, expr, thenpart, elsepart));
 }
 
@@ -418,6 +419,7 @@ TOKEN parseassign(TOKEN lhs) {
         printf("Unrecognized statement\n");
     }
     rhs = parseexpr();
+
     return (binop(tok, lhs, rhs));
 }
 
@@ -497,7 +499,11 @@ TOKEN parseexpr() {
                 done = 1;
         }
     }
-    while (opstack != NULL) reduce(&opstack, &opndstack);
+
+    while (opstack != NULL) {
+        reduce(&opstack, &opndstack);
+    }
+
     return (opndstack);
 }
 
