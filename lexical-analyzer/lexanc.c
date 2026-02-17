@@ -24,8 +24,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "lexan.h"
 #include "token.h"
+// token.h must be included before lexan.h because of the TOKEN type definition
+#include "lexan.h"
 
 extern int CHARCLASS[];
 
