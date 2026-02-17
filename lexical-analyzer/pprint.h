@@ -19,7 +19,7 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. */
 
-#ifndef PPRINT_H  // (If these guards exist, keep them)
+#ifndef PPRINT_H
 #define PPRINT_H
 
 #include "token.h"
