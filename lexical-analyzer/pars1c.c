@@ -90,6 +90,15 @@ TOKEN makeintc(int num) {
     return tok;
 }
 
+TOKEN makefuncall(TOKEN tok, TOKEN fn, TOKEN args) {
+    if (tok == NULL) tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = FUNCALLOP;
+    tok->operands = cons(fn, args);  // link function name to args
+
+    return tok;
+}
+
 TOKEN copytok(TOKEN origtok) {
     TOKEN newtok = talloc();
     if (origtok != NULL) *newtok = *origtok;
@@ -201,6 +210,25 @@ TOKEN makeprogn(TOKEN tok, TOKEN statements) {
         dbugprinttok(tok);
         dbugprinttok(statements);
     };
+    return tok;
+}
+
+TOKEN makeprogram(TOKEN name, TOKEN args, TOKEN body) {
+    TOKEN tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = PROGRAMOP;
+    tok->operands = cons(name, cons(args, body));
+
+    return tok;
+}
+
+/* Helper to wrap the args in a progn */
+TOKEN makeprogn_args(TOKEN args) {
+    TOKEN tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = PROGNOP;
+    tok->operands = args;
+
     return tok;
 }
 
@@ -428,6 +456,10 @@ TOKEN parseexpr() {
                 tok = gettok();
                 opndstack = cons(tok, opndstack);
                 break;
+            case STRINGTOK:
+                tok = gettok();
+                opndstack = cons(tok, opndstack);
+                break;
             case DELIMITER:
                 if ((tok->whichval + DELIMITER_BIAS) == LPAREN) {
                     tok = gettok();
@@ -534,6 +566,37 @@ TOKEN parsefor(TOKEN keytok) {
     return makefor(sign, keytok, asg, tokb, endexpr, tokc, stmt);  // build the tree with makefor
 }
 
+TOKEN parsefuncall(TOKEN fn) {
+    TOKEN args = NULL;
+    TOKEN tok = peektok();
+
+    // check for arguments
+    if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == LPAREN) {
+        gettok();  // consume '('
+
+        while (1) {
+            // handle strings explicitly here since parseexpr might not yet
+            if (peektok()->tokentype == STRINGTOK) {
+                args = nconc(args, gettok());
+            } else {
+                args = nconc(args, parseexpr());
+            }
+
+            tok = peektok();
+            if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA) {
+                gettok();  // consume ','
+            } else {
+                break;
+            }
+        }
+
+        tok = gettok();  // consume ')'
+        if ((tok->whichval + DELIMITER_BIAS) != RPAREN) yyerror("Missing ')' in function call");
+    }
+
+    return makefuncall(NULL, fn, args);
+}
+
 /* Parse a Pascal statement: the "big switch" */
 TOKEN statement() {
     TOKEN tok, result;
@@ -552,8 +615,16 @@ TOKEN statement() {
                 result = parsefor(tok);
                 break;
         }
-    } else if (tok->tokentype == IDENTIFIERTOK)
-        result = parseassign(tok);
+    } else if (tok->tokentype == IDENTIFIERTOK) {
+        TOKEN next = peektok();
+
+        if (next->tokentype == OPERATOR && next->whichval == ASSIGNOP) {
+            result = parseassign(findid(tok));  // variable assignment statement
+        } else {
+            result = parsefuncall(findid(tok));  // procedure/function call
+        }
+    }
+
     return (result);
 }
 
@@ -562,24 +633,40 @@ int yyparse() {
     TOKEN tok;
     TOKEN name;
     TOKEN args;
-    TOKEN dottok;
+    TOKEN body;
+
+    TOKEN arg_list = NULL;
     savedtoken = NULL;
 
     tok = gettok();
-
     if (!reserved(tok, PROGRAM)) {
         yyerror("Missing PROGRAM header");
     }
 
     name = gettok();  // program name (e.g. graph1)
-    tok = gettok();   // expect '('
+    if (name->tokentype != IDENTIFIERTOK) {
+        yyerror("Expected program name");
+    }
 
-    // simple logic for trivb: consume arguments until ')'
-    while (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == RPAREN)) {
+    tok = gettok();  // expect '('
+    if ((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == LPAREN) {
         tok = gettok();
+        while (!((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == RPAREN)) {
+            arg_list = nconc(arg_list, tok);
+            tok = gettok();
+
+            if ((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == COMMA) {
+                tok = gettok();  // skip comma
+            }
+        }
+    } else {
+        yyerror("Expected '(' after program name");
     }
 
     tok = gettok();  // expect ';'
+    if (!((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
+        yyerror("Expected ';' after program header");
+    }
 
     tok = peektok();
     if (reserved(tok, VAR)) {
@@ -587,24 +674,42 @@ int yyparse() {
         parsevar();  // handle i, lim : integer;
     }
 
-    parseresult = statement();
-    dottok = gettok(); /* get the period at the end */
+    body = statement();
 
-    if (dottok->tokentype == OPERATOR && dottok->whichval == DOTOP) {
-        return (0);
-    } else {
-        return (1);
+    tok = gettok();  // consume ending period
+    if (!((tok->tokentype == OPERATOR) && (tok->whichval == DOTOP))) {
+        yyerror("Expected . at end of program");
     }
+
+    args = makeprogn_args(arg_list);
+
+    parseresult = makeprogram(name, args, body);  // build final tree node
+
+    return 0;  // success
 }
 
 /* Call yyparse repeatedly to test */
 int main(void) {
     int res;
+
     initscanner();
     init_charclass(); /* initialize character class array */
+    initsyms();       // initialize "integer", "real", etc.
+
     printf("Started parser test.\n");
-    res = yyparse();
+    res = yyparse();  // run parser
+
     printf("yyparse result = %8d\n", res);
-    if (DEBUG & DB_PARSERES) dbugprinttok(parseresult);
+
+    /* ADD THIS to match the sample output: */
+    printf("Symbol table level 1\n");
+    printstlevel(1);
+
+    if (DEBUG & DB_PARSERES) {
+        dbugprinttok(parseresult);
+    }
+
     ppexpr(parseresult);
+
+    return 0;
 }
