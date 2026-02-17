@@ -19,6 +19,11 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. */
 
+#ifndef PPRINT_H  // (If these guards exist, keep them)
+#define PPRINT_H
+
+#include "token.h"
+
 void debugprinttok(TOKEN tok);
 int strlength(char str[]);
 void printtok(TOKEN tok);
@@ -29,3 +34,5 @@ void dbugplist(TOKEN tok);
 void dbugbplist(TOKEN tok);
 void dbugbprinttok(TOKEN tok);
 void dbugprintexpr(TOKEN tok);
+
+#endif

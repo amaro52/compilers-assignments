@@ -5,7 +5,7 @@
 /* Copyright (c) 2021 Gordon S. Novak Jr. and
    The University of Texas at Austin. */
 
-/* 
+/*
  This program is free software; you can redistribute it and/or modify
  it under the terms of the GNU General Public License as published by
  the Free Software Foundation; either version 2 of the License, or
@@ -33,16 +33,16 @@
  */
 
 /* Define kinds of symbols.  The kind field should be one of these. */
-#define ARGSYM       0
-#define BASICTYPE    1
-#define CONSTSYM     2
-#define VARSYM       3
-#define SUBRANGE     4
-#define FUNCTIONSYM  5
-#define ARRAYSYM     6   
-#define RECORDSYM    7
-#define TYPESYM      8
-#define POINTERSYM   9
+#define ARGSYM 0
+#define BASICTYPE 1
+#define CONSTSYM 2
+#define VARSYM 3
+#define SUBRANGE 4
+#define FUNCTIONSYM 5
+#define ARRAYSYM 6
+#define RECORDSYM 7
+#define TYPESYM 8
+#define POINTERSYM 9
 
 /* The following defines are commented out, but may be needed.
 #define INTEGER    0
@@ -54,23 +54,25 @@
 
 #define PPSYMDEBUG 0
 
-#define MAXBLOCKS 50          /* Max number of program blocks           */
+#define MAXBLOCKS 50 /* Max number of program blocks           */
 
 typedef struct symtbr {
-  struct symtbr *link;
-  char   namestring[16];
-  int    kind;                /* kind of symbol -- see defines. */
-  int    basicdt;             /* type code for basic data types       */
-  struct symtbr *datatype;    /* pointer for more complex data types  */
-  int    blocklevel;
-  int    size;
-  int    offset;
-  union  { char  stringconst[16];
-	   int   intnum;
-           double realnum; } constval;
-  int    lowbound;
-  int    highbound;
-  } SYMBOLREC, *SYMBOL;
+    struct symtbr* link;
+    char namestring[16];
+    int kind;                /* kind of symbol -- see defines. */
+    int basicdt;             /* type code for basic data types       */
+    struct symtbr* datatype; /* pointer for more complex data types  */
+    int blocklevel;
+    int size;
+    int offset;
+    union {
+        char stringconst[16];
+        int intnum;
+        double realnum;
+    } constval;
+    int lowbound;
+    int highbound;
+} SYMBOLREC, *SYMBOL;
 
 /* symalloc makes a new symbol table record and returns a pointer to it.
    Essentially     new Symbol()   */
@@ -116,12 +118,12 @@ void printst(void);
 
 SYMBOL insertbt(char name[], int basictp, int siz);
 SYMBOL insertfn(char name[], SYMBOL resulttp, SYMBOL argtp);
-void initsyms(void);    /* initializes pre-defined symbols */
+void initsyms(void); /* initializes pre-defined symbols */
 
 /* alignsize returns the required alignment boundary for a type  */
 int alignsize(SYMBOL sym);
 
 extern int DEBUG;
-extern int blocknumber;           /* Number of current block being compiled */
-extern int blockoffs[MAXBLOCKS];  /* Storage offsets for each block         */
+extern int blocknumber;          /* Number of current block being compiled */
+extern int blockoffs[MAXBLOCKS]; /* Storage offsets for each block         */
 extern int basicsizes[5];

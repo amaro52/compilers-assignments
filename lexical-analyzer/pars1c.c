@@ -38,13 +38,22 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 
-#include "codegen.h"
-#include "lexan.h"
-#include "parse.h"
-#include "pprint.h"
-#include "symtab.h"
+/* 1. Define TOKEN first and foremost */
 #include "token.h"
+
+/* 2. Define the scanner and symbol table headers */
+#include "lexan.h"
+// #include "symtab.h"
+
+// parse.h after symtab.h because it needs the symbol table definitions
+#include "parse.h"
+
+/* 3. Now include the printing headers */
+#include "pprint.h"
+
+// #include "codegen.h" here for now
 
 TOKEN parseresult;
 TOKEN savedtoken;
@@ -58,7 +67,87 @@ TOKEN savedtoken;
 #define DB_GETTOK 32   /* bit to trace gettok */
 #define DB_EXPR 64     /* bit to trace expr */
 
-/* add item to front of list */
+TOKEN statement(); /* forward declaration for mutually recursive functions */
+
+/* Global counter for labels */
+int labelnumber = 0;
+
+TOKEN makelabel() {
+    TOKEN tok = talloc();
+    tok->tokentype = NUMBERTOK;
+    tok->basicdt = INTEGER;
+    tok->intval = labelnumber++;
+
+    return tok;
+}
+
+TOKEN makeintc(int num) {
+    TOKEN tok = talloc();
+    tok->tokentype = NUMBERTOK;
+    tok->basicdt = INTEGER;
+    tok->intval = num;
+
+    return tok;
+}
+
+TOKEN copytok(TOKEN origtok) {
+    TOKEN newtok = talloc();
+    if (origtok != NULL) *newtok = *origtok;
+    newtok->link = NULL;
+
+    return newtok;
+}
+
+TOKEN nconc(TOKEN lista, TOKEN listb) {
+    TOKEN t;
+    if (lista == NULL) return listb;
+    t = lista;
+    while (t->link != NULL) t = t->link;
+    t->link = listb;
+
+    return lista;
+}
+
+TOKEN makegoto(int label) {
+    TOKEN tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = GOTOOP;
+    tok->operands = makeintc(label);
+
+    return tok;
+}
+
+TOKEN dolabel(TOKEN labeltok, TOKEN tok, TOKEN statement) {
+    if (tok == NULL) tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = LABELOP;
+    tok->operands = labeltok;
+
+    return tok;  // in tree format, lanel is just a node in the list
+}
+
+/* Install variables into the symbol table */
+void instvars(TOKEN idlist, TOKEN typetok) {
+    SYMBOL sym;
+    TOKEN t;
+
+    // loop through identifier list
+    for (t = idlist; t != NULL; t = t->link) {
+        sym = insertsym(t->stringval);  // insert name into symbol table
+
+        sym->kind = VARSYM;
+
+        // copy type info
+        sym->datatype = typetok->symtype;
+        sym->basicdt = sym->datatype->basicdt;
+
+        // calculate offset
+        sym->offset = blockoffs[blocknumber];
+        sym->size = sym->datatype->size;
+        blockoffs[blocknumber] += sym->size;
+    }
+}
+
 TOKEN cons(TOKEN item, TOKEN list) {
     item->link = list;
     if (DEBUG & DB_CONS) {
@@ -66,6 +155,7 @@ TOKEN cons(TOKEN item, TOKEN list) {
         dbugprinttok(item);
         dbugprinttok(list);
     };
+
     return item;
 }
 
@@ -81,6 +171,7 @@ TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
         dbugprinttok(lhs); /*      /                                */
         dbugprinttok(rhs); /*    lhs --- rhs                        */
     };
+
     return op;
 }
 
@@ -117,7 +208,7 @@ TOKEN makefor(int sign, TOKEN tok, TOKEN asg, TOKEN tokb, TOKEN endexpr, TOKEN t
               TOKEN statement) {
     TOKEN loopstack = NULL;
     TOKEN test, increment, goto_start, if_stmt;
-    int start_label = makelabel();
+    TOKEN start_label = makelabel();
 
     TOKEN var = asg->operands;  // get loop variable (the LHS of :=)
 
@@ -139,12 +230,12 @@ TOKEN makefor(int sign, TOKEN tok, TOKEN asg, TOKEN tokb, TOKEN endexpr, TOKEN t
     increment = binop(assign_op, copytok(var), binop(plus_op, copytok(var), makeintc(1)));
 
     // assemble body of loop: increment followed by goto to start
-    goto_start = makegoto(start_label);
+    goto_start = makegoto(start_label->intval);
     TOKEN body_progn = makeprogn(tokc, nconc(statement, nconc(increment, goto_start)));
 
     if_stmt = makeif(tokb, test, body_progn, NULL);  // wrap the body in the if test
 
-    loopstack = nconc(asg, nconc(dolabel(makeintc(start_label), tok, NULL), if_stmt));
+    loopstack = nconc(asg, nconc(dolabel(makeintc(start_label->intval), tok, NULL), if_stmt));
 
     return makeprogn(talloc(), loopstack);
 }
