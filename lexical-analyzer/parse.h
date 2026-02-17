@@ -201,6 +201,12 @@ TOKEN dopoint(TOKEN var, TOKEN tok);
 TOKEN instarray(TOKEN bounds, TOKEN typetok);
 //     assert(bounds->symtype->kind == SUBRANGE );
 
+/* Parse a VAR declaration block: var i, lim : integer; */
+void parsevar();
+
+/* Parse a for statement: for i := 0 to lim do ... */
+TOKEN parsefor(TOKEN keytok);
+
 /* talloc allocates a new TOKEN record. */
 TOKEN talloc();
 

@@ -113,6 +113,93 @@ TOKEN makeprogn(TOKEN tok, TOKEN statements) {
     return tok;
 }
 
+TOKEN makefor(int sign, TOKEN tok, TOKEN asg, TOKEN tokb, TOKEN endexpr, TOKEN tokc,
+              TOKEN statement) {
+    TOKEN loopstack = NULL;
+    TOKEN test, increment, goto_start, if_stmt;
+    int start_label = makelabel();
+
+    TOKEN var = asg->operands;  // get loop variable (the LHS of :=)
+
+    // create test
+    TOKEN test_op = talloc();
+    test_op->tokentype = OPERATOR;
+    test_op->whichval = (sign == 1) ? LEOP : GEOP;
+    test = binop(test_op, copytok(var), endexpr);
+
+    // create increment
+    TOKEN plus_op = talloc();
+    plus_op->tokentype = OPERATOR;
+    plus_op->whichval = (sign == 1) ? PLUSOP : MINUSOP;
+
+    TOKEN assign_op = talloc();
+    assign_op->tokentype = OPERATOR;
+    assign_op->whichval = ASSIGNOP;
+
+    increment = binop(assign_op, copytok(var), binop(plus_op, copytok(var), makeintc(1)));
+
+    // assemble body of loop: increment followed by goto to start
+    goto_start = makegoto(start_label);
+    TOKEN body_progn = makeprogn(tokc, nconc(statement, nconc(increment, goto_start)));
+
+    if_stmt = makeif(tokb, test, body_progn, NULL);  // wrap the body in the if test
+
+    loopstack = nconc(asg, nconc(dolabel(makeintc(start_label), tok, NULL), if_stmt));
+
+    return makeprogn(talloc(), loopstack);
+}
+
+TOKEN findid(TOKEN tok) {
+    SYMBOL s;
+    s = searchst(tok->stringval);  // seach symbol table for the identifier string in token
+
+    if (s == NULL) {
+        return tok;  // not found => undeclared variable => return token as is
+        // TODO: check if need to return error
+    }
+
+    tok->symentry = s;  // attach symbol table entry to token
+
+    tok->symtype = s->datatype;  // attach data type to token
+
+    // handle Constant Identifiers
+    // if symbol is a constant, transform token into a number
+    if (s->kind == CONSTSYM) {
+        tok->tokentype = NUMBERTOK;
+        tok->basicdt = s->basicdt;
+
+        if (s->basicdt == INTEGER) {
+            tok->intval = s->constval.intnum;
+        } else if (s->basicdt == REAL) {
+            tok->realval = s->constval.realnum;
+        } else if (s->basicdt == STRINGTYPE) {
+            strcpy(tok->stringval, s->constval.stringconst);
+        }
+    }
+
+    return tok;
+}
+
+TOKEN findtype(TOKEN tok) {
+    SYMBOL s;
+
+    s = searchst(tok->stringval);  // search symbol table for the type name in token
+
+    if (s == NULL) {
+        yyerror("Undefined type identifier");
+        return tok;
+    }
+
+    // ensure that the symbol found is actually a type
+    if (s->kind == BASICTYPE || s->kind == TYPESYM) {
+        tok->symtype = s;
+    } else {
+        yyerror("Identifier is not a type name");
+    }
+
+    return tok;
+}
+
 void yyerror(char const* s) {
     fputs(s, stderr);
     putc('\n', stderr);
@@ -124,22 +211,29 @@ TOKEN gettok() {
     if (savedtoken != NULL) {
         tok = savedtoken;
         savedtoken = NULL;
-    } else
+    } else {
         tok = gettoken();
+    }
+
     if (DEBUG & DB_GETTOK) {
         printf("gettok\n");
         dbugprinttok(tok);
     };
+
     return (tok);
 }
 
 /* Peek at the next token */
 TOKEN peektok() {
-    if (savedtoken == NULL) savedtoken = gettoken();
+    if (savedtoken == NULL) {
+        savedtoken = gettoken();
+    }
+
     if (DEBUG & DB_GETTOK) {
         printf("peektok\n");
         dbugprinttok(savedtoken);
     };
+
     return (savedtoken);
 }
 
@@ -235,6 +329,10 @@ TOKEN parseexpr() {
         tok = peektok();
         switch (tok->tokentype) {
             case IDENTIFIERTOK:
+                tok = gettok();
+                tok = findid(tok);  // resolve the identifier immediately
+                opndstack = cons(tok, opndstack);
+                break;
             case NUMBERTOK: /* operand: push onto stack */
                 tok = gettok();
                 opndstack = cons(tok, opndstack);
@@ -270,6 +368,81 @@ TOKEN parseexpr() {
     return (opndstack);
 }
 
+void parsevar() {
+    TOKEN idlist, typetok, tok;
+
+    // already consumed 'VAR' in the calling function
+    while (peektok()->tokentype == IDENTIFIERTOK) {
+        idlist = NULL;
+
+        // collect the list of identifiers (i, lim)
+        while (1) {
+            tok = gettok();
+            idlist = nconc(idlist, tok);  // add identifier to list
+
+            tok = peektok();
+            if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA) {
+                gettok();  // consume comma & keep looping
+            } else {
+                break;  // no more commas, move on to the colon
+            }
+        }
+
+        // expect a colon ':'
+        tok = gettok();
+        if (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COLON)) {
+            yyerror("Missing colon in var declaration");
+        }
+
+        typetok = gettok();
+        typetok = findtype(typetok);  // resolve 'integer' to its symbol table entry
+
+        instvars(idlist, typetok);  // put variables into symbol table
+
+        // expect a semicolon ';'
+        tok = gettok();
+        if (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
+            yyerror("Missing semicolon in var declaration");
+        }
+    }
+}
+
+TOKEN parsefor(TOKEN keytok) {
+    TOKEN asg, endexpr, stmt, tok;
+    TOKEN tokb, tokc;
+    int sign = 1;  // deafult to 'to'
+
+    // parse assignment (i := 0)
+    tok = gettok();
+    if (tok->tokentype != IDENTIFIERTOK) yyerror("Expected identifier in for loop");
+
+    asg = parseassign(findid(tok));  // resolve 'i' and then parse the assignment
+
+    // epxect 'to' or 'downto'
+    tok = gettok();
+    if (reserved(tok, TO)) {
+        sign = 1;
+    } else if (reserved(tok, DOWNTO)) {
+        sign = -1;
+    } else {
+        yyerror("Expected TO or DOWNTO");
+    }
+
+    endexpr = parseexpr();
+
+    // expect 'do'
+    tokb = gettok();
+    if (!reserved(tokb, DO)) {
+        yyerror("Missing DO");
+    }
+
+    // parse the loop body statement
+    tokc = talloc();
+    stmt = statement();
+
+    return makefor(sign, keytok, asg, tokb, endexpr, tokc, stmt);  // build the tree with makefor
+}
+
 /* Parse a Pascal statement: the "big switch" */
 TOKEN statement() {
     TOKEN tok, result;
@@ -284,6 +457,9 @@ TOKEN statement() {
             case IF:
                 result = parseif(tok);
                 break;
+            case FOR:
+                result = parsefor(tok);
+                break;
         }
     } else if (tok->tokentype == IDENTIFIERTOK)
         result = parseassign(tok);
@@ -292,14 +468,42 @@ TOKEN statement() {
 
 /* program = statement . */
 int yyparse() {
+    TOKEN tok;
+    TOKEN name;
+    TOKEN args;
     TOKEN dottok;
     savedtoken = NULL;
-    parseresult = statement(); /* get the statement         */
-    dottok = gettok();         /* get the period at the end */
-    if (dottok->tokentype == OPERATOR && dottok->whichval == DOTOP)
+
+    tok = gettok();
+
+    if (!reserved(tok, PROGRAM)) {
+        yyerror("Missing PROGRAM header");
+    }
+
+    name = gettok();  // program name (e.g. graph1)
+    tok = gettok();   // expect '('
+
+    // simple logic for trivb: consume arguments until ')'
+    while (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == RPAREN)) {
+        tok = gettok();
+    }
+
+    tok = gettok();  // expect ';'
+
+    tok = peektok();
+    if (reserved(tok, VAR)) {
+        gettok();    // consume 'VAR'
+        parsevar();  // handle i, lim : integer;
+    }
+
+    parseresult = statement();
+    dottok = gettok(); /* get the period at the end */
+
+    if (dottok->tokentype == OPERATOR && dottok->whichval == DOTOP) {
         return (0);
-    else
+    } else {
         return (1);
+    }
 }
 
 /* Call yyparse repeatedly to test */

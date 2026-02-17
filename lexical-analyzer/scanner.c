@@ -82,14 +82,15 @@ TOKEN gettoken() {
     TOKEN tok = (TOKEN)talloc(); /* = new token */
     cclass = CHARCLASS[c];
 
-    if (cclass == ALPHA)
+    if (cclass == ALPHA) {
         identifier(tok);
-    else if (cclass == NUMERIC)
+    } else if (cclass == NUMERIC) {
         number(tok);
-    else if (c == '\'')
+    } else if (c == '\'') {
         getstring(tok);
-    else
+    } else {
         special(tok);
+    }
 
     // debug
     // if (DEBUGGETTOKEN == 0) {
