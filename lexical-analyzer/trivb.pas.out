@@ -1,0 +1,13 @@
+yyparse result =        0
+Symbol table level 1
+ 34208762928           i  VAR    0 typ integer  lvl  1  siz     4  off     0
+ 34208763008         lim  VAR    0 typ integer  lvl  1  siz     4  off     4
+ token 34208777216  OP       program  dtype  0  link 0  operands 4385126560
+(program graph1 (progn output)
+                (progn (:= lim 7)
+                       (progn (:= i 0)
+                              (label 0)
+                              (if (<= i lim)
+                                  (progn (funcall writeln '*')
+                                         (:= i (+ i 1))
+                                         (goto 0))))))

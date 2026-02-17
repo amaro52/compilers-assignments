@@ -159,11 +159,12 @@ void instvars(TOKEN idlist, TOKEN typetok) {
 
 TOKEN cons(TOKEN item, TOKEN list) {
     item->link = list;
-    if (DEBUG & DB_CONS) {
-        printf("cons\n");
-        dbugprinttok(item);
-        dbugprinttok(list);
-    };
+
+    // if (DEBUG & DB_CONS) {
+    //     printf("cons\n");
+    //     dbugprinttok(item);
+    //     dbugprinttok(list);
+    // };
 
     return item;
 }
@@ -174,12 +175,13 @@ TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
     op->operands = lhs; /* link operands to operator       */
     lhs->link = rhs;    /* link second operand to first    */
     rhs->link = NULL;   /* terminate operand list          */
-    if (DEBUG & DB_BINOP) {
-        printf("binop\n");
-        dbugprinttok(op);  /*       op         =  (op lhs rhs)      */
-        dbugprinttok(lhs); /*      /                                */
-        dbugprinttok(rhs); /*    lhs --- rhs                        */
-    };
+
+    // if (DEBUG & DB_BINOP) {
+    //     printf("binop\n");
+    //     dbugprinttok(op);  /*       op         =  (op lhs rhs)      */
+    //     dbugprinttok(lhs); /*      /                                */
+    //     dbugprinttok(rhs); /*    lhs --- rhs                        */
+    // };
 
     return op;
 }
@@ -191,13 +193,15 @@ TOKEN makeif(TOKEN tok, TOKEN exp, TOKEN thenpart, TOKEN elsepart) {
     thenpart->link = elsepart;
     exp->link = thenpart;
     tok->operands = exp;
-    if (DEBUG & DB_MAKEIF) {
-        printf("makeif\n");
-        dbugprinttok(tok);
-        dbugprinttok(exp);
-        dbugprinttok(thenpart);
-        dbugprinttok(elsepart);
-    };
+
+    // if (DEBUG & DB_MAKEIF) {
+    //     printf("makeif\n");
+    //     dbugprinttok(tok);
+    //     dbugprinttok(exp);
+    //     dbugprinttok(thenpart);
+    //     dbugprinttok(elsepart);
+    // };
+
     return tok;
 }
 
@@ -205,11 +209,13 @@ TOKEN makeprogn(TOKEN tok, TOKEN statements) {
     tok->tokentype = OPERATOR;
     tok->whichval = PROGNOP;
     tok->operands = statements;
-    if (DEBUG & DB_MAKEPROGN) {
-        printf("makeprogn\n");
-        dbugprinttok(tok);
-        dbugprinttok(statements);
-    };
+
+    // if (DEBUG & DB_MAKEPROGN) {
+    //     printf("makeprogn\n");
+    //     dbugprinttok(tok);
+    //     dbugprinttok(statements);
+    // };
+
     return tok;
 }
 
@@ -334,10 +340,10 @@ TOKEN gettok() {
         tok = gettoken();
     }
 
-    if (DEBUG & DB_GETTOK) {
-        printf("gettok\n");
-        dbugprinttok(tok);
-    };
+    // if (DEBUG & DB_GETTOK) {
+    //     printf("gettok\n");
+    //     dbugprinttok(tok);
+    // };
 
     return (tok);
 }
@@ -348,10 +354,10 @@ TOKEN peektok() {
         savedtoken = gettoken();
     }
 
-    if (DEBUG & DB_GETTOK) {
-        printf("peektok\n");
-        dbugprinttok(savedtoken);
-    };
+    // if (DEBUG & DB_GETTOK) {
+    //     printf("peektok\n");
+    //     dbugprinttok(savedtoken);
+    // };
 
     return (savedtoken);
 }
@@ -408,7 +414,9 @@ TOKEN parseassign(TOKEN lhs) {
     TOKEN tok, rhs;
     TOKEN parseexpr();
     tok = gettok();
-    if (tok->tokentype != OPERATOR || tok->whichval != ASSIGNOP) printf("Unrecognized statement\n");
+    if (tok->tokentype != OPERATOR || tok->whichval != ASSIGNOP) {
+        printf("Unrecognized statement\n");
+    }
     rhs = parseexpr();
     return (binop(tok, lhs, rhs));
 }
@@ -417,9 +425,9 @@ TOKEN parseassign(TOKEN lhs) {
 /* Reduce an op and 2 operands */
 void reduce(TOKEN* opstack, TOKEN* opndstack) {
     TOKEN op, lhs, rhs;
-    if (DEBUG & DB_EXPR) {
-        printf("reduce\n");
-    };
+    // if (DEBUG & DB_EXPR) {
+    //     printf("reduce\n");
+    // };
     op = *opstack; /* pop one operator from op stack */
     *opstack = op->link;
     rhs = *opndstack; /* pop two operands from opnd stack */
@@ -437,9 +445,11 @@ TOKEN parseexpr() {
     TOKEN tok, op, lhs, rhs;
     int state, done;
     TOKEN opstack, opndstack;
-    if (DEBUG & DB_EXPR) {
-        printf("parseexpr\n");
-    };
+
+    // if (DEBUG & DB_EXPR) {
+    //     printf("parseexpr\n");
+    // };
+
     done = 0;
     state = 0;
     opstack = NULL;
@@ -696,13 +706,11 @@ int main(void) {
     init_charclass(); /* initialize character class array */
     initsyms();       // initialize "integer", "real", etc.
 
-    printf("Started parser test.\n");
+    // printf("Started parser test.\n");
     res = yyparse();  // run parser
 
     printf("yyparse result = %8d\n", res);
 
-    /* ADD THIS to match the sample output: */
-    printf("Symbol table level 1\n");
     printstlevel(1);
 
     if (DEBUG & DB_PARSERES) {
