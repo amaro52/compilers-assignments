@@ -201,6 +201,13 @@ TOKEN dopoint(TOKEN var, TOKEN tok);
 TOKEN instarray(TOKEN bounds, TOKEN typetok);
 //     assert(bounds->symtype->kind == SUBRANGE );
 
+/* Create a label at the start, parse the body statements, and then generate an IF (or an
+ * IFNOT) that jumps back to the top if the condition is false. */
+TOKEN parserepeat;
+
+/* Install constatns into the symbol table. */
+void parseconst();
+
 /* Parse a VAR declaration block: var i, lim : integer; */
 void parsevar();
 

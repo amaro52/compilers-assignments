@@ -183,6 +183,13 @@ TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
     //     dbugprinttok(rhs); /*    lhs --- rhs                        */
     // };
 
+    // Type Inference: promote result to REAL if either side is REAL
+    if (lhs->basicdt == REAL || rhs->basicdt == REAL) {
+        op->basicdt = REAL;
+    } else {
+        op->basicdt = INTEGER;
+    }
+
     return op;
 }
 
@@ -507,6 +514,64 @@ TOKEN parseexpr() {
     return (opndstack);
 }
 
+void parseconst() {
+    TOKEN id, val;
+    SYMBOL s;
+
+    while (peektok()->tokentype == IDENTIFIERTOK) {
+        id = gettok();
+
+        if (gettok()->whichval != '=' + OPERATOR_BIAS) {
+            yyerror("Expected '=' in const");  // expect '='
+        }
+
+        val = gettok();
+        if (val->tokentype != NUMBERTOK) {
+            yyerror("Constant must be a number");
+        }
+
+        // put into symbol table
+        s = insertsym(id->stringval);
+        s->kind = CONSTSYM;
+        s->basicdt = val->basicdt;
+
+        if (val->basicdt == INTEGER)
+            s->constval.intnum = val->intval;
+        else
+            s->constval.realnum = val->realval;
+
+        if (gettok()->whichval != SEMICOLON + DELIMITER_BIAS) {
+            yyerror("Expected a ;");  // expect ';
+        }
+    }
+}
+
+TOKEN parserepeat() {
+    TOKEN top_label = makelabel();
+    TOKEN body = NULL;
+    TOKEN cond, result;
+
+    // parse the body
+    while (!reserved(peektok(), UNTIL)) {
+        body = nconc(body, statement());
+        if (peektok()->whichval == SEMICOLON + DELIMITER_BIAS) {
+            gettok();
+        }
+    }
+
+    gettok();            // consume UNTIL
+    cond = parseexpr();  // parse the exit condition (n = 0)
+
+    // build the tree: (progn (label top) body (if (not cond) (goto top)))
+    TOKEN jump_back = makeif(NULL, make_not(cond), makegoto(top_label->intval), NULL);
+
+    result = makeprogn(NULL, dolabel(top_label, NULL, NULL));
+    result->operands = nconc(result->operands, body);
+    result->operands = nconc(result->operands, jump_back);
+
+    return result;
+}
+
 void parsevar() {
     TOKEN idlist, typetok, tok;
 
@@ -630,6 +695,9 @@ TOKEN statement() {
             case FOR:
                 result = parsefor(tok);
                 break;
+            case REPEAT:
+                result = parserepeat(tok);
+                break;
         }
     } else if (tok->tokentype == IDENTIFIERTOK) {
         TOKEN next = peektok();
@@ -682,6 +750,12 @@ int yyparse() {
     tok = gettok();  // expect ';'
     if (!((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
         yyerror("Expected ';' after program header");
+    }
+
+    tok = peektok();
+    if (reserved(tok, CONST)) {
+        gettok();  // consume CONST
+        parseconst();
     }
 
     tok = peektok();
