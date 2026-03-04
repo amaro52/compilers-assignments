@@ -203,7 +203,7 @@ TOKEN instarray(TOKEN bounds, TOKEN typetok);
 
 /* Create a label at the start, parse the body statements, and then generate an IF (or an
  * IFNOT) that jumps back to the top if the condition is false. */
-TOKEN parserepeat;
+TOKEN parserepeat(TOKEN keytok);
 
 /* Install constatns into the symbol table. */
 void parseconst();

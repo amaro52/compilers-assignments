@@ -67,7 +67,11 @@ TOKEN savedtoken;
 #define DB_GETTOK 32   /* bit to trace gettok */
 #define DB_EXPR 64     /* bit to trace expr */
 
-TOKEN statement(); /* forward declaration for mutually recursive functions */
+/* forward declaration for mutually recursive functions */
+TOKEN statement();
+TOKEN parseexpr();
+TOKEN parsefuncall(TOKEN fn);
+void parseconst();
 
 /* Global counter for labels */
 int labelnumber = 0;
@@ -172,9 +176,8 @@ TOKEN cons(TOKEN item, TOKEN list) {
 /* reduce binary operator */
 /* operator, left-hand side, right-hand side */
 TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
-    op->operands = lhs; /* link operands to operator       */
-    lhs->link = rhs;    /* link second operand to first    */
-    rhs->link = NULL;   /* terminate operand list          */
+    if (lhs != NULL) lhs->link = NULL;
+    if (rhs != NULL) rhs->link = NULL;
 
     // if (DEBUG & DB_BINOP) {
     //     printf("binop\n");
@@ -183,12 +186,26 @@ TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
     //     dbugprinttok(rhs); /*    lhs --- rhs                        */
     // };
 
-    // Type Inference: promote result to REAL if either side is REAL
-    if (lhs->basicdt == REAL || rhs->basicdt == REAL) {
-        op->basicdt = REAL;
-    } else {
-        op->basicdt = INTEGER;
+    // if one side is REAL and the other is INTEGER, 'float' the integer
+    if (lhs->basicdt == INTEGER && rhs->basicdt == REAL) {
+        TOKEN f = talloc();
+        f->tokentype = OPERATOR;
+        f->whichval = FLOATOP;
+        f->operands = lhs;
+        f->basicdt = REAL;
+        lhs = f;
+    } else if (lhs->basicdt == REAL && rhs->basicdt == INTEGER) {
+        TOKEN f = talloc();
+        f->tokentype = OPERATOR;
+        f->whichval = FLOATOP;
+        f->operands = rhs;
+        f->basicdt = REAL;
+        rhs = f;
     }
+
+    op->operands = lhs;
+    lhs->link = rhs;
+    op->basicdt = (lhs->basicdt == REAL || rhs->basicdt == REAL) ? REAL : INTEGER;
 
     return op;
 }
@@ -289,15 +306,14 @@ TOKEN findid(TOKEN tok) {
         return tok;  // not found => undeclared variable => return token as is
     }
 
-    tok->symentry = s;  // attach symbol table entry to token
-
+    tok->symentry = s;           // attach symbol table entry to token
     tok->symtype = s->datatype;  // attach data type to token
+    tok->basicdt = s->basicdt;
 
     // handle Constant Identifiers
     // if symbol is a constant, transform token into a number
     if (s->kind == CONSTSYM) {
         tok->tokentype = NUMBERTOK;
-        tok->basicdt = s->basicdt;
 
         if (s->basicdt == INTEGER) {
             tok->intval = s->constval.intnum;
@@ -375,24 +391,32 @@ int reserved(TOKEN tok, int n) {
 
 /* Parse a BEGIN ... END statement */
 TOKEN parsebegin(TOKEN keytok) {
-    TOKEN front, end, tok;
+    TOKEN front = NULL, end = NULL, tok;
     TOKEN statement();
-    int done;
-    front = NULL;
-    done = 0;
+    int done = 0;
+
     while (done == 0) {
-        tok = statement(); /* Get a statement */
-        if (front == NULL) /* Put at end of list */
-            front = tok;
-        else
-            end->link = tok;
-        tok->link = NULL;
-        end = tok;
-        tok = gettok(); /* Get token: END or semicolon */
-        if (reserved(tok, END))
+        tok = statement();
+
+        /* Put at end of list */
+        if (tok != NULL) {
+            if (front == NULL) {
+                front = tok;
+            } else {
+                end->link = tok;
+            }
+            tok->link = NULL;
+            end = tok;
+        }
+
+        tok = gettok(); /* Get END or semicolon */
+        if (reserved(tok, END)) {
             done = 1;
-        else if (tok->tokentype != DELIMITER || (tok->whichval + DELIMITER_BIAS) != SEMICOLON)
+        } else if (tok->tokentype != DELIMITER || (tok->whichval + DELIMITER_BIAS) != SEMICOLON) {
             yyerror("Bad item in begin - end.");
+            printf("Bad item in begin-end! Type: %d, Val: %d, String: '%s'\n", tok->tokentype,
+                   tok->whichval, tok->stringval);
+        }
     };
 
     return (makeprogn(keytok, front));
@@ -420,12 +444,18 @@ TOKEN parseif(TOKEN keytok) {
 /* Parse an assignment statement */
 TOKEN parseassign(TOKEN lhs) {
     TOKEN tok, rhs;
-    TOKEN parseexpr();
-    tok = gettok();
-    if (tok->tokentype != OPERATOR || tok->whichval != ASSIGNOP) {
-        printf("Unrecognized statement\n");
-    }
+
+    tok = gettok();  // consume ':='
+
     rhs = parseexpr();
+    if (lhs->basicdt == INTEGER && rhs->basicdt == REAL) {
+        TOKEN f = talloc();
+        f->tokentype = OPERATOR;
+        f->whichval = FIXOP;
+        f->operands = rhs;
+        f->basicdt = INTEGER;
+        rhs = f;
+    }
 
     return (binop(tok, lhs, rhs));
 }
@@ -434,19 +464,62 @@ TOKEN parseassign(TOKEN lhs) {
 /* Reduce an op and 2 operands */
 void reduce(TOKEN* opstack, TOKEN* opndstack) {
     TOKEN op, lhs, rhs;
-    // if (DEBUG & DB_EXPR) {
-    //     printf("reduce\n");
-    // };
-    op = *opstack; /* pop one operator from op stack */
+
+    if (*opstack == NULL) {
+        return;
+    }
+
+    op = *opstack;
     *opstack = op->link;
-    rhs = *opndstack; /* pop two operands from opnd stack */
-    lhs = rhs->link;
-    *opndstack = lhs->link;
-    *opndstack = cons(binop(op, lhs, rhs), *opndstack); /* push result opnd */
+
+    // handle Unary Minus or NOT
+    if (op->symtype == (SYMBOL)1 || op->whichval == NOTOP ||
+        (op->whichval + OPERATOR_BIAS) == NOTOP) {
+        if (op->symtype == (SYMBOL)1) {
+            op->whichval = 2;
+        }
+
+        rhs = *opndstack;
+        if (rhs != NULL) {
+            *opndstack = rhs->link;
+            rhs->link = NULL;
+            op->basicdt = rhs->basicdt;
+        }
+        op->operands = rhs;
+        *opndstack = cons(op, *opndstack);
+    } else {
+        // binary operator logic
+        rhs = *opndstack;
+        if (rhs != NULL) {
+            lhs = rhs->link;
+            if (lhs != NULL) {
+                *opndstack = lhs->link;
+                *opndstack = cons(binop(op, lhs, rhs), *opndstack);
+            }
+        }
+    }
 }
 
 /*                             +     *                                     */
-static int precedence[] = {0, 1, 0, 3}; /* **** trivial version **** */
+/* Precedence table for Pascal operators */
+static int precedence[] = {
+    0,  // dummy
+    1,  // +
+    1,  // -
+    2,  // *
+    2,  // /
+    2,  // div
+    2,  // mod
+    0,  // =
+    0,  // <>
+    0,  // <
+    0,  // <=
+    0,  // >=
+    0,  // >
+    1,  // or
+    2,  // and
+    3   // not
+};
 
 /* Parse an expression using operator precedence */
 TOKEN parseexpr() {
@@ -468,39 +541,76 @@ TOKEN parseexpr() {
         switch (tok->tokentype) {
             case IDENTIFIERTOK:
                 tok = gettok();
-                tok = findid(tok);  // resolve the identifier immediately
-                opndstack = cons(tok, opndstack);
+                tok = findid(tok);
+
+                if (peektok()->tokentype == DELIMITER &&
+                    (peektok()->whichval + DELIMITER_BIAS) == LPAREN) {
+                    opndstack = cons(parsefuncall(tok), opndstack);
+                } else {
+                    opndstack = cons(tok, opndstack);
+                }
+
+                state = 1;
                 break;
-            case NUMBERTOK: /* operand: push onto stack */
+            case NUMBERTOK:
                 tok = gettok();
                 opndstack = cons(tok, opndstack);
+                state = 1;
                 break;
             case STRINGTOK:
                 tok = gettok();
                 opndstack = cons(tok, opndstack);
+                state = 1;
                 break;
             case DELIMITER:
                 if ((tok->whichval + DELIMITER_BIAS) == LPAREN) {
                     tok = gettok();
                     opstack = cons(tok, opstack);
                 } else if ((tok->whichval + DELIMITER_BIAS) == RPAREN) {
-                    tok = gettok();
-                    while (opstack != NULL && (opstack->tokentype != DELIMITER))
-                        reduce(&opstack, &opndstack);
-                    opstack = opstack->link; /* discard the left paren */
-                } else
+                    int has_lparen = 0;
+                    TOKEN temp = opstack;
+                    while (temp != NULL) {
+                        if (temp->tokentype == DELIMITER &&
+                            (temp->whichval + DELIMITER_BIAS) == LPAREN) {
+                            has_lparen = 1;
+                            break;
+                        }
+                        temp = temp->link;
+                    }
+
+                    if (has_lparen) {
+                        tok = gettok();  // consume ')'
+                        while (opstack != NULL && opstack->tokentype != DELIMITER)
+                            reduce(&opstack, &opndstack);
+                        opstack = opstack->link;  // discard '('
+                        state = 1;
+                    } else {
+                        done = 1;
+                    }
+                } else {
                     done = 1;
+                }
                 break;
             case OPERATOR:
-                if (tok->whichval != DOTOP) /* special case for now */
-                {
+                if (tok->whichval != DOTOP && (tok->whichval + OPERATOR_BIAS) != DOTOP) {
                     tok = gettok();
+
+                    if (state == 0 &&
+                        (tok->whichval == MINUSOP || tok->whichval + OPERATOR_BIAS == MINUSOP ||
+                         tok->whichval == 2)) {
+                        tok->whichval = 15;
+                        tok->symtype = (SYMBOL)1;  // mark as unary
+                    }
+
                     while (opstack != NULL && opstack->tokentype != DELIMITER &&
-                           (precedence[opstack->whichval] >= precedence[tok->whichval]))
+                           (precedence[opstack->whichval] >= precedence[tok->whichval])) {
                         reduce(&opstack, &opndstack);
+                    }
                     opstack = cons(tok, opstack);
-                } else
+                    state = 0;
+                } else {
                     done = 1;
+                }
                 break;
             default:
                 done = 1;
@@ -515,46 +625,63 @@ TOKEN parseexpr() {
 }
 
 void parseconst() {
-    TOKEN id, val;
+    TOKEN id, val, tok;
     SYMBOL s;
 
     while (peektok()->tokentype == IDENTIFIERTOK) {
         id = gettok();
 
-        if (gettok()->whichval != '=' + OPERATOR_BIAS) {
-            yyerror("Expected '=' in const");  // expect '='
+        // operate on '='
+        tok = gettok();
+        if (!(tok->tokentype == OPERATOR && tok->whichval + OPERATOR_BIAS == EQ)) {
+            yyerror("Expected '=' in const");
         }
 
+        // operate on constant or identifier
         val = gettok();
-        if (val->tokentype != NUMBERTOK) {
-            yyerror("Constant must be a number");
+        if (val->tokentype == IDENTIFIERTOK) {
+            val = findid(val);
         }
 
-        // put into symbol table
+        // install into symbol table
         s = insertsym(id->stringval);
         s->kind = CONSTSYM;
         s->basicdt = val->basicdt;
 
-        if (val->basicdt == INTEGER)
+        if (val->basicdt == INTEGER) {
             s->constval.intnum = val->intval;
-        else
+        } else {
             s->constval.realnum = val->realval;
+        }
 
-        if (gettok()->whichval != SEMICOLON + DELIMITER_BIAS) {
-            yyerror("Expected a ;");  // expect ';
+        // expect a semicolon ';'
+        tok = gettok();
+        if (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
+            yyerror("Expected ; after constant");
         }
     }
 }
 
-TOKEN parserepeat() {
-    TOKEN top_label = makelabel();
+/* Helper to create a NOT operator node */
+TOKEN make_not(TOKEN exp) {
+    TOKEN tok = talloc();
+    tok->tokentype = OPERATOR;
+    tok->whichval = NOTOP;
+    tok->operands = exp;
+    return tok;
+}
+
+TOKEN parserepeat(TOKEN keytok) {
     TOKEN body = NULL;
-    TOKEN cond, result;
+    TOKEN cond;
+    TOKEN result;
+    TOKEN top_label = makelabel();
 
     // parse the body
     while (!reserved(peektok(), UNTIL)) {
         body = nconc(body, statement());
-        if (peektok()->whichval == SEMICOLON + DELIMITER_BIAS) {
+        if (peektok()->tokentype == DELIMITER &&
+            (peektok()->whichval + DELIMITER_BIAS) == SEMICOLON) {
             gettok();
         }
     }
@@ -563,13 +690,11 @@ TOKEN parserepeat() {
     cond = parseexpr();  // parse the exit condition (n = 0)
 
     // build the tree: (progn (label top) body (if (not cond) (goto top)))
-    TOKEN jump_back = makeif(NULL, make_not(cond), makegoto(top_label->intval), NULL);
+    TOKEN jump_back =
+        makeif(talloc(), cond, makeprogn(talloc(), NULL), makegoto(top_label->intval));
+    TOKEN label_node = dolabel(makeintc(top_label->intval), talloc(), NULL);
 
-    result = makeprogn(NULL, dolabel(top_label, NULL, NULL));
-    result->operands = nconc(result->operands, body);
-    result->operands = nconc(result->operands, jump_back);
-
-    return result;
+    return makeprogn(keytok, nconc(label_node, nconc(body, jump_back)));
 }
 
 void parsevar() {
@@ -672,10 +797,15 @@ TOKEN parsefuncall(TOKEN fn) {
         }
 
         tok = gettok();  // consume ')'
-        if ((tok->whichval + DELIMITER_BIAS) != RPAREN) yyerror("Missing ')' in function call");
+        if ((tok->whichval + DELIMITER_BIAS) != RPAREN) {
+            yyerror("Missing ')' in function call");
+        }
     }
 
-    return makefuncall(NULL, fn, args);
+    TOKEN result = makefuncall(NULL, fn, args);
+    result->basicdt = fn->basicdt;
+
+    return result;
 }
 
 /* Parse a Pascal statement: the "big switch" */
@@ -702,7 +832,8 @@ TOKEN statement() {
     } else if (tok->tokentype == IDENTIFIERTOK) {
         TOKEN next = peektok();
 
-        if (next->tokentype == OPERATOR && next->whichval == ASSIGNOP) {
+        if (next->tokentype == OPERATOR &&
+            (next->whichval == ASSIGNOP || next->whichval + OPERATOR_BIAS == ASSIGNOP)) {
             result = parseassign(findid(tok));  // variable assignment statement
         } else {
             result = parsefuncall(findid(tok));  // procedure/function call
@@ -733,12 +864,12 @@ int yyparse() {
     }
 
     tok = gettok();  // expect '('
-    if ((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == LPAREN) {
+    if (tok->tokentype == DELIMITER && tok->whichval + DELIMITER_BIAS == LPAREN) {
         tok = gettok();
         while (!((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == RPAREN)) {
             arg_list = nconc(arg_list, tok);
-            tok = gettok();
 
+            tok = gettok();
             if ((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == COMMA) {
                 tok = gettok();  // skip comma
             }
@@ -747,7 +878,7 @@ int yyparse() {
         yyerror("Expected '(' after program name");
     }
 
-    tok = gettok();  // expect ';'
+    tok = gettok();  // consume ';'
     if (!((tok->tokentype == DELIMITER) && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
         yyerror("Expected ';' after program header");
     }
@@ -767,7 +898,7 @@ int yyparse() {
     body = statement();
 
     tok = gettok();  // consume ending period
-    if (!((tok->tokentype == OPERATOR) && (tok->whichval == DOTOP))) {
+    if (tok == NULL || tok->tokentype != OPERATOR || tok->whichval != DOTOP) {
         yyerror("Expected . at end of program");
     }
 
@@ -793,9 +924,9 @@ int main(void) {
 
     printstlevel(1);
 
-    if (DEBUG & DB_PARSERES) {
-        dbugprinttok(parseresult);
-    }
+    // if (DEBUG & DB_PARSERES) {
+    //     dbugprinttok(parseresult);
+    // }
 
     ppexpr(parseresult);
 
