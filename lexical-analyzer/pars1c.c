@@ -72,9 +72,22 @@ TOKEN statement();
 TOKEN parseexpr();
 TOKEN parsefuncall(TOKEN fn);
 void parseconst();
+void parsetype();
+void parsevar();
+TOKEN parsepostfix(TOKEN tok);
+TOKEN gettok();
+TOKEN peektok();
+int reserved(TOKEN tok, int n);
+void yyerror(char const* s);
 
 /* Global counter for labels */
 int labelnumber = 0;
+
+/* Label Table: maps user label numbers to internal label numbers */
+#define MAXLABELS 50
+int labeltable[MAXLABELS];    // user label number 
+int labelvalues[MAXLABELS];   // internal label number 
+int nlabels = 0;
 
 TOKEN makelabel() {
     TOKEN tok = talloc();
@@ -144,21 +157,396 @@ void instvars(TOKEN idlist, TOKEN typetok) {
     SYMBOL sym;
     TOKEN t;
 
-    // loop through identifier list
     for (t = idlist; t != NULL; t = t->link) {
-        sym = insertsym(t->stringval);  // insert name into symbol table
-
+        sym = insertsym(t->stringval);
         sym->kind = VARSYM;
-
-        // copy type info
         sym->datatype = typetok->symtype;
         sym->basicdt = sym->datatype->basicdt;
 
-        // calculate offset
+        /* align the offset */
+        int align = alignsize(sym->datatype);
+        blockoffs[blocknumber] = wordaddress(blockoffs[blocknumber], align);
+
         sym->offset = blockoffs[blocknumber];
         sym->size = sym->datatype->size;
         blockoffs[blocknumber] += sym->size;
     }
+}
+
+/* instlabel installs a user label into the label table */
+void instlabel(TOKEN num) {
+    if (nlabels >= MAXLABELS) { yyerror("Too many labels"); return; }
+    labeltable[nlabels] = num->intval;
+    labelvalues[nlabels] = labelnumber++;
+    nlabels++;
+}
+
+/* wordaddress pads offset n to a multiple of wordsize */
+int wordaddress(int n, int wordsize) {
+    if (wordsize <= 0) {
+        return n;
+    }
+
+    return ((n + wordsize - 1) / wordsize) * wordsize;
+}
+
+/* makesubrange makes a SUBRANGE symbol table entry */
+TOKEN makesubrange(TOKEN tok, int low, int high) {
+    SYMBOL sym = symalloc();
+    sym->kind = SUBRANGE;
+    sym->basicdt = INTEGER;
+    sym->lowbound = low;
+    sym->highbound = high;
+    sym->size = basicsizes[INTEGER];
+
+    tok->symtype = sym;
+
+    return tok;
+}
+
+/* instenum installs an enumerated subrange */
+TOKEN instenum(TOKEN idlist) {
+    int count = 0;
+    TOKEN t;
+    SYMBOL sym;
+
+    for (t = idlist; t != NULL; t = t->link) {
+        sym = insertsym(t->stringval);
+        sym->kind = CONSTSYM;
+        sym->basicdt = INTEGER;
+        sym->constval.intnum = count++;
+    }
+    TOKEN tok = talloc();
+    
+    return makesubrange(tok, 0, count - 1);
+}
+
+/* instdotdot installs a .. subrange */
+TOKEN instdotdot(TOKEN lowtok, TOKEN dottok, TOKEN hightok) {
+    return makesubrange(dottok, lowtok->intval, hightok->intval);
+}
+
+/* insttype will install a type name in symbol table */
+void insttype(TOKEN typename, TOKEN typetok) {
+    SYMBOL sym = searchins(typename->stringval);
+    sym->kind = TYPESYM;
+    sym->datatype = typetok->symtype;
+    sym->size = sym->datatype->size;
+    sym->basicdt = sym->datatype->basicdt;
+}
+
+/* instpoint will install a pointer type in symbol table */
+TOKEN instpoint(TOKEN tok, TOKEN typename) {
+    SYMBOL sym = symalloc();
+    sym->kind = POINTERSYM;
+    sym->basicdt = POINTER;
+    sym->size = basicsizes[POINTER];
+    sym->datatype = searchins(typename->stringval);
+    tok->symtype = sym;
+
+    return tok;
+}
+
+/* instfields installs type in a list of field name tokens */
+TOKEN instfields(TOKEN idlist, TOKEN typetok) {
+    TOKEN t;
+
+    for (t = idlist; t != NULL; t = t->link) {
+        t->symtype = typetok->symtype;
+    }
+
+    return idlist;
+}
+
+/* instrec installs a record definition */
+TOKEN instrec(TOKEN rectok, TOKEN argstok) {
+    SYMBOL rec = symalloc();
+    rec->kind = RECORDSYM;
+
+    int offset = 0;
+    SYMBOL first = NULL;
+    SYMBOL prev = NULL;
+    TOKEN t;
+    
+    for (t = argstok; t != NULL; t = t->link) {
+        SYMBOL field = makesym(t->stringval);
+        field->datatype = t->symtype;
+        field->basicdt = field->datatype->basicdt;
+
+        int align = alignsize(field->datatype);
+        offset = wordaddress(offset, align);
+        field->offset = offset;
+        field->size = field->datatype->size;
+        offset += field->size;
+
+        if (first == NULL) first = field;
+        if (prev != NULL) prev->link = field;
+        prev = field;
+    }
+
+    rec->datatype = first;
+    rec->size = wordaddress(offset, RECORDALIGN);
+    rectok->symtype = rec;
+
+    return rectok;
+}
+
+/* instarray installs an array declaration */
+TOKEN instarray(TOKEN bounds, TOKEN typetok) {
+    SYMBOL arr = symalloc();
+    arr->kind = ARRAYSYM;
+    SYMBOL sub = bounds->symtype;
+    
+    arr->lowbound = sub->lowbound;
+    arr->highbound = sub->highbound;
+    arr->datatype = typetok->symtype;
+    arr->size = (sub->highbound - sub->lowbound + 1) * arr->datatype->size;
+    
+    bounds->symtype = arr;
+    
+    return bounds;
+}
+
+/* settoktype sets up the type fields of a token */
+void settoktype(TOKEN tok, SYMBOL typ, SYMBOL ent) {
+    tok->symtype = typ;
+    if (typ != NULL) tok->basicdt = typ->basicdt;
+    tok->symentry = ent;
+}
+
+TOKEN fillintc(TOKEN tok, int num) {
+    tok->tokentype = NUMBERTOK;
+    tok->basicdt = INTEGER;
+    tok->intval = num;
+    
+    return tok;
+}
+
+/* makearef makes an array reference operation */
+TOKEN makearef(TOKEN var, TOKEN off, TOKEN tok) {
+    if (tok == NULL) {
+        tok = talloc();
+    }
+
+    tok->tokentype = OPERATOR;
+    tok->whichval = AREFOP;
+    tok->operands = var;
+    var->link = off;
+    off->link = NULL;
+
+    tok->symtype = var->symtype;
+    tok->basicdt = var->basicdt;
+
+    return tok;
+}
+
+/* makeplus makes a + operator */
+TOKEN makeplus(TOKEN lhs, TOKEN rhs, TOKEN tok) {
+    if (tok == NULL) {
+        tok = talloc();
+    }
+
+    tok->tokentype = OPERATOR;
+    tok->whichval = PLUSOP;
+    tok->operands = lhs;
+    lhs->link = rhs;
+    rhs->link = NULL;
+    tok->basicdt = INTEGER;
+    
+    return tok;
+}
+
+/* addint adds integer off to expression exp */
+TOKEN addint(TOKEN exp, TOKEN off, TOKEN tok) {
+    return makeplus(exp, off, tok);
+}
+
+/* addoffs adds offset off to an aref expression exp */
+TOKEN addoffs(TOKEN exp, TOKEN off) {
+    TOKEN offsettok = exp->operands->link;
+
+    if (offsettok->tokentype == NUMBERTOK) {
+        offsettok->intval += off->intval;
+    } else if (offsettok->tokentype == OPERATOR && offsettok->whichval == PLUSOP) {
+        TOKEN firstarg = offsettok->operands;
+        if (firstarg->tokentype == NUMBERTOK) {
+            firstarg->intval += off->intval;
+        }
+    }
+    
+    return exp;
+}
+
+/* mulint multiplies expression exp by integer n */
+TOKEN mulint(TOKEN exp, int n) {
+    TOKEN mult = talloc();
+    mult->tokentype = OPERATOR;
+    mult->whichval = TIMESOP;
+    mult->basicdt = INTEGER;
+
+    TOKEN ntok = makeintc(n);
+    mult->operands = ntok;
+    ntok->link = exp;
+    exp->link = NULL;
+    
+    return mult;
+}
+
+/* reducedot handles a record field reference */
+TOKEN reducedot(TOKEN var, TOKEN dot, TOKEN field) {
+    SYMBOL recsym = var->symtype;
+    if (recsym == NULL) { yyerror("reducedot: null type"); return var; }
+
+    // if type is a TYPESYM, follow to the actual type
+    if (recsym->kind == TYPESYM) {
+        recsym = recsym->datatype;
+    }
+
+    if (recsym->kind != RECORDSYM) {
+        yyerror("reducedot: not a record");
+        return var;
+    }
+
+    // search the field list
+    SYMBOL fld = recsym->datatype;
+    while (fld != NULL && strcmp(fld->namestring, field->stringval) != 0)
+        fld = fld->link;
+    if (fld == NULL) { yyerror("Field not found"); return var; }
+
+    TOKEN offtok = makeintc(fld->offset);
+
+    // if var is already an aref, add offset to it
+    if (var->tokentype == OPERATOR && var->whichval == AREFOP) {
+        addoffs(var, offtok);
+        var->symtype = fld->datatype;
+        var->basicdt = fld->datatype->basicdt;
+        return var;
+    }
+
+    // otherwise create a new aref
+    TOKEN result = makearef(var, offtok, dot);
+    result->symtype = fld->datatype;
+    result->basicdt = fld->datatype->basicdt;
+    return result;
+}
+
+/* arrayref processes an array reference a[i] */
+TOKEN arrayref(TOKEN arr, TOKEN tok, TOKEN subs, TOKEN tokb) {
+    TOKEN result = arr;
+    TOKEN sub = subs;
+
+    while (sub != NULL) {
+        TOKEN nextsub = sub->link;
+        sub->link = NULL;
+
+        SYMBOL arrsym = result->symtype;
+        if (arrsym->kind == TYPESYM) arrsym = arrsym->datatype;
+        if (arrsym->kind != ARRAYSYM) { yyerror("arrayref: not an array"); return result; }
+
+        int elemsize = arrsym->datatype->size;
+        int low = arrsym->lowbound;
+
+        TOKEN offset;
+        if (sub->tokentype == NUMBERTOK && sub->basicdt == INTEGER) {
+            // constant subscript: compute offset directly
+            int val = (sub->intval - low) * elemsize;
+            offset = makeintc(val);
+        } else {
+            // variable subscript: (+ (-low*elemsize) (* elemsize sub))
+            TOKEN negoff = makeintc(-low * elemsize);
+            TOKEN scaled = mulint(sub, elemsize);
+            offset = makeplus(negoff, scaled, NULL);
+        }
+
+        if (result->tokentype == OPERATOR && result->whichval == AREFOP) {
+            // already an aref -- adjust
+            addoffs(result, offset);
+            result->symtype = arrsym->datatype;
+            result->basicdt = arrsym->datatype->basicdt;
+        } else {
+            result = makearef(result, offset, NULL);
+            result->symtype = arrsym->datatype;
+            result->basicdt = arrsym->datatype->basicdt;
+        }
+        sub = nextsub;
+    }
+    return result;
+}
+
+/* dopoint handles a ^ pointer dereference */
+TOKEN dopoint(TOKEN var, TOKEN tok) {
+    tok->tokentype = OPERATOR;
+    tok->whichval = POINTEROP;
+    tok->operands = var;
+    var->link = NULL;
+
+    SYMBOL ptrtype = var->symtype;
+    /* Follow through TYPESYM to get actual structure */
+    if (ptrtype != NULL && ptrtype->kind == TYPESYM)
+        ptrtype = ptrtype->datatype;
+
+    if (ptrtype != NULL && ptrtype->kind == POINTERSYM) {
+        SYMBOL target = ptrtype->datatype;
+        if (target != NULL && target->kind == TYPESYM) {
+            tok->symtype = target->datatype;
+        } else {
+            tok->symtype = target;
+        }
+    }
+    if (tok->symtype != NULL) {
+        tok->basicdt = tok->symtype->basicdt;
+    }
+
+    return tok;
+}
+
+/* makewhile makes structures for a while statement */
+TOKEN makewhile(TOKEN tok, TOKEN expr, TOKEN tokb, TOKEN statement) {
+    TOKEN label = makelabel();
+    TOKEN labeltok = dolabel(makeintc(label->intval), tok, NULL);
+
+    TOKEN gototok = makegoto(label->intval);
+    TOKEN body = makeprogn(tokb, nconc(statement, gototok));
+    TOKEN iftok = makeif(talloc(), expr, body, NULL);
+
+    return makeprogn(talloc(), nconc(labeltok, iftok));
+}
+
+/* parsepostfix handles ^, ., and [] after an identifier/expression */
+TOKEN parsepostfix(TOKEN tok) {
+    int done = 0;
+
+    while (!done) {
+        TOKEN next = peektok();
+        if (next->tokentype == OPERATOR &&
+            (next->whichval == POINTEROP || (next->whichval + OPERATOR_BIAS) == POINT)) {
+            TOKEN caret = gettok();
+            tok = dopoint(tok, caret);
+        } else if (next->tokentype == OPERATOR &&
+                   (next->whichval == DOTOP || (next->whichval + OPERATOR_BIAS) == DOT)) {
+            TOKEN dot = gettok();
+            TOKEN field = gettok();
+            tok = reducedot(tok, dot, field);
+        } else if (next->tokentype == DELIMITER &&
+                   (next->whichval + DELIMITER_BIAS) == LBRACKET) {
+            TOKEN lbr = gettok();
+            TOKEN subs = NULL;
+            while (1) {
+                TOKEN sub = parseexpr();
+                subs = nconc(subs, sub);
+                next = peektok();
+                if (next->tokentype == DELIMITER &&
+                    (next->whichval + DELIMITER_BIAS) == COMMA) {
+                    gettok();
+                } else break;
+            }
+            TOKEN rbr = gettok(); // consume ]
+            tok = arrayref(tok, lbr, subs, rbr);
+        } else {
+            done = 1;
+        }
+    }
+    return tok;
 }
 
 TOKEN cons(TOKEN item, TOKEN list) {
@@ -186,21 +574,23 @@ TOKEN binop(TOKEN op, TOKEN lhs, TOKEN rhs) {
     //     dbugprinttok(rhs); /*    lhs --- rhs                        */
     // };
 
-    // if one side is REAL and the other is INTEGER, 'float' the integer
-    if (lhs->basicdt == INTEGER && rhs->basicdt == REAL) {
-        TOKEN f = talloc();
-        f->tokentype = OPERATOR;
-        f->whichval = FLOATOP;
-        f->operands = lhs;
-        f->basicdt = REAL;
-        lhs = f;
-    } else if (lhs->basicdt == REAL && rhs->basicdt == INTEGER) {
-        TOKEN f = talloc();
-        f->tokentype = OPERATOR;
-        f->whichval = FLOATOP;
-        f->operands = rhs;
-        f->basicdt = REAL;
-        rhs = f;
+    // only coerce INTEGER<->REAL; skip for POINTER and other types
+    if (lhs->basicdt != POINTER && rhs->basicdt != POINTER) {
+        if (lhs->basicdt == INTEGER && rhs->basicdt == REAL) {
+            TOKEN f = talloc();
+            f->tokentype = OPERATOR;
+            f->whichval = FLOATOP;
+            f->operands = lhs;
+            f->basicdt = REAL;
+            lhs = f;
+        } else if (lhs->basicdt == REAL && rhs->basicdt == INTEGER) {
+            TOKEN f = talloc();
+            f->tokentype = OPERATOR;
+            f->whichval = FLOATOP;
+            f->operands = rhs;
+            f->basicdt = REAL;
+            rhs = f;
+        }
     }
 
     op->operands = lhs;
@@ -448,6 +838,15 @@ TOKEN parseassign(TOKEN lhs) {
     tok = gettok();  // consume ':='
 
     rhs = parseexpr();
+    rhs = parsepostfix(rhs);
+
+    /* Coerce integer constant to real if LHS is REAL */
+    if (lhs->basicdt == REAL && rhs->basicdt == INTEGER &&
+        rhs->tokentype == NUMBERTOK) {
+        rhs->basicdt = REAL;
+        rhs->realval = (double)rhs->intval;
+    }
+
     if (lhs->basicdt == INTEGER && rhs->basicdt == REAL) {
         TOKEN f = talloc();
         f->tokentype = OPERATOR;
@@ -545,10 +944,10 @@ TOKEN parseexpr() {
 
                 if (peektok()->tokentype == DELIMITER &&
                     (peektok()->whichval + DELIMITER_BIAS) == LPAREN) {
-                    opndstack = cons(parsefuncall(tok), opndstack);
-                } else {
-                    opndstack = cons(tok, opndstack);
+                    tok = parsefuncall(tok);
                 }
+                tok = parsepostfix(tok);
+                opndstack = cons(tok, opndstack);
 
                 state = 1;
                 break;
@@ -592,7 +991,8 @@ TOKEN parseexpr() {
                 }
                 break;
             case OPERATOR:
-                if (tok->whichval != DOTOP && (tok->whichval + OPERATOR_BIAS) != DOTOP) {
+                if (tok->whichval != DOTOP && (tok->whichval + OPERATOR_BIAS) != DOTOP
+                    && tok->whichval != POINTEROP && (tok->whichval + OPERATOR_BIAS) != POINT) {
                     tok = gettok();
 
                     if (state == 0 &&
@@ -608,6 +1008,18 @@ TOKEN parseexpr() {
                     }
                     opstack = cons(tok, opstack);
                     state = 0;
+                } else {
+                    done = 1;
+                }
+                break;
+            case RESERVED:
+                if (reserved(tok, NIL)) {
+                    tok = gettok();
+                    tok->tokentype = NUMBERTOK;
+                    tok->basicdt = POINTER;
+                    tok->intval = 0;
+                    opndstack = cons(tok, opndstack);
+                    state = 1;
                 } else {
                     done = 1;
                 }
@@ -697,23 +1109,161 @@ TOKEN parserepeat(TOKEN keytok) {
     return makeprogn(keytok, nconc(label_node, nconc(body, jump_back)));
 }
 
+/* parsetype_desc parses a type description and returns a token with symtype set */
+TOKEN parsetype_desc() {
+    TOKEN tok = peektok();
+
+    // enum: (red, white, blue)
+    if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == LPAREN) {
+        gettok(); // consume (
+        TOKEN idlist = NULL;
+        while (1) {
+            TOKEN id = gettok();
+            idlist = nconc(idlist, id);
+            if (peektok()->tokentype == DELIMITER &&
+                (peektok()->whichval + DELIMITER_BIAS) == COMMA)
+                gettok();
+            else break;
+        }
+        gettok(); // consume )
+        
+        return instenum(idlist);
+    }
+
+    // pointer: ^ typename
+    if (tok->tokentype == OPERATOR &&
+        (tok->whichval == POINTEROP || (tok->whichval + OPERATOR_BIAS) == POINT)) {
+        gettok(); // consume ^
+        TOKEN tname = gettok();
+        
+        return instpoint(talloc(), tname);
+    }
+
+    // record: record ... end 
+    if (reserved(tok, RECORD)) {
+        gettok(); // consume RECORD
+        TOKEN fields = NULL;
+        while (!reserved(peektok(), END)) {
+            // parse one field group: id, id, ... : type
+            TOKEN idlist = NULL;
+            while (1) {
+                TOKEN id = gettok();
+                idlist = nconc(idlist, id);
+                if (peektok()->tokentype == DELIMITER &&
+                    (peektok()->whichval + DELIMITER_BIAS) == COMMA)
+                    gettok();
+                else break;
+            }
+            tok = gettok(); // consume :
+            TOKEN ftype = parsetype_desc();
+            instfields(idlist, ftype);
+            fields = nconc(fields, idlist);
+            // consume optional ;
+            if (peektok()->tokentype == DELIMITER &&
+                (peektok()->whichval + DELIMITER_BIAS) == SEMICOLON)
+                gettok();
+        }
+        gettok(); // consume END 
+        
+        return instrec(talloc(), fields);
+    }
+
+    // array: array[bounds] of type
+    if (reserved(tok, ARRAY)) {
+        gettok(); // consume ARRAY
+        gettok(); // consume [ 
+        // parse bounds list
+        TOKEN boundslist = NULL;
+        TOKEN boundstail = NULL;
+        while (1) {
+            TOKEN btok;
+            TOKEN first = gettok();
+            if (first->tokentype == NUMBERTOK) {
+                // number .. number
+                TOKEN dottok = gettok(); // consume ..
+                TOKEN high = gettok();
+                btok = instdotdot(first, dottok, high);
+            } else {
+                // type name used as range (e.g. color)
+                btok = findtype(first);
+                // follow to get the subrange
+                SYMBOL s = btok->symtype;
+                if (s->kind == TYPESYM) s = s->datatype;
+                btok->symtype = s;
+            }
+            if (boundslist == NULL) boundslist = btok;
+            else boundstail->link = btok;
+            boundstail = btok;
+            btok->link = NULL;
+
+            if (peektok()->tokentype == DELIMITER &&
+                (peektok()->whichval + DELIMITER_BIAS) == COMMA)
+                gettok();
+            else break;
+        }
+        gettok(); // consume " ] "
+        gettok(); // consume " OF "
+        TOKEN elemtype = parsetype_desc();
+
+        // build arrays from right to left (innermost first)
+        // reverse the bounds list
+        TOKEN rev = NULL;
+        TOKEN cur = boundslist;
+        while (cur != NULL) {
+            TOKEN next = cur->link;
+            cur->link = rev;
+            rev = cur;
+            cur = next;
+        }
+
+        // now rev is the reversed list; apply instarray from front
+        TOKEN b = rev;
+        while (b != NULL) {
+            TOKEN nextb = b->link;
+            b->link = NULL;
+            elemtype = instarray(b, elemtype);
+            b = nextb;
+        }
+        
+        return elemtype;
+    }
+
+    // named type: integer, real, complex, pp, etc.
+    tok = gettok();
+    
+    return findtype(tok);
+}
+
+/* parsetype parses a type declaration block */
+void parsetype() {
+    TOKEN tok;
+    while (peektok()->tokentype == IDENTIFIERTOK) {
+        TOKEN tname = gettok(); // type name
+        tok = gettok(); // consume "="
+        TOKEN typetok = parsetype_desc();
+        insttype(tname, typetok);
+        // consume ";"
+        if (peektok()->tokentype == DELIMITER &&
+            (peektok()->whichval + DELIMITER_BIAS) == SEMICOLON)
+            gettok();
+    }
+}
+
 void parsevar() {
     TOKEN idlist, typetok, tok;
 
-    // already consumed 'VAR' in the calling function
     while (peektok()->tokentype == IDENTIFIERTOK) {
         idlist = NULL;
 
-        // collect the list of identifiers (i, lim)
         while (1) {
             tok = gettok();
-            idlist = nconc(idlist, tok);  // add identifier to list
+            idlist = nconc(idlist, tok);
 
             tok = peektok();
             if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA) {
-                gettok();  // consume comma & keep looping
+                gettok();
             } else {
-                break;  // no more commas, move on to the colon
+                break;
             }
         }
 
@@ -723,12 +1273,9 @@ void parsevar() {
             yyerror("Missing colon in var declaration");
         }
 
-        typetok = gettok();
-        typetok = findtype(typetok);  // resolve 'integer' to its symbol table entry
+        typetok = parsetype_desc();
+        instvars(idlist, typetok);
 
-        instvars(idlist, typetok);  // put variables into symbol table
-
-        // expect a semicolon ';'
         tok = gettok();
         if (!(tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == SEMICOLON)) {
             yyerror("Missing semicolon in var declaration");
@@ -776,29 +1323,74 @@ TOKEN parsefuncall(TOKEN fn) {
     TOKEN args = NULL;
     TOKEN tok = peektok();
 
-    // check for arguments
     if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == LPAREN) {
-        gettok();  // consume '('
+        gettok(); // consume "("
 
         while (1) {
-            // handle strings explicitly here since parseexpr might not yet
             if (peektok()->tokentype == STRINGTOK) {
                 args = nconc(args, gettok());
             } else {
-                args = nconc(args, parseexpr());
+                TOKEN arg = parseexpr();
+                arg = parsepostfix(arg);
+                args = nconc(args, arg);
             }
 
             tok = peektok();
             if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA) {
-                gettok();  // consume ','
+                gettok();
             } else {
                 break;
             }
         }
 
-        tok = gettok();  // consume ')'
-        if ((tok->whichval + DELIMITER_BIAS) != RPAREN) {
+        tok = gettok(); // consume ")"
+                if ((tok->whichval + DELIMITER_BIAS) != RPAREN) {
             yyerror("Missing ')' in function call");
+        }
+    }
+
+    // new(ptr) → (:= ptr (funcall new size))
+    if (strcmp(fn->stringval, "new") == 0 && args != NULL) {
+        TOKEN ptrvar = args;
+        SYMBOL ptrtype = ptrvar->symtype;
+        /* Follow TYPESYM to get the actual POINTERSYM */
+        if (ptrtype != NULL && ptrtype->kind == TYPESYM)
+            ptrtype = ptrtype->datatype;
+        int size = 0;
+        
+        if (ptrtype != NULL && ptrtype->kind == POINTERSYM) {
+            SYMBOL target = ptrtype->datatype;
+            if (target != NULL && target->kind == TYPESYM)
+                size = target->datatype->size;
+            else if (target != NULL)
+                size = target->size;
+        }
+        
+        TOKEN sizearg = makeintc(size);
+        TOKEN funcall = makefuncall(NULL, fn, sizearg);
+        TOKEN assignop = talloc();
+
+        assignop->tokentype = OPERATOR;
+        assignop->whichval = ASSIGNOP;
+        assignop->operands = ptrvar;
+        ptrvar->link = funcall;
+        funcall->link = NULL;
+
+        return assignop;
+    }
+
+    // writeln/write type dispatch (skip for string arguments)
+    if (args != NULL && args->tokentype != STRINGTOK) {
+        if (strcmp(fn->stringval, "writeln") == 0) {
+            if (args->basicdt == INTEGER)
+                strcpy(fn->stringval, "writelni");
+            else if (args->basicdt == REAL)
+                strcpy(fn->stringval, "writelnf");
+        } else if (strcmp(fn->stringval, "write") == 0) {
+            if (args->basicdt == INTEGER)
+                strcpy(fn->stringval, "writei");
+            else if (args->basicdt == REAL)
+                strcpy(fn->stringval, "writef");
         }
     }
 
@@ -814,7 +1406,6 @@ TOKEN statement() {
     result = NULL;
     tok = gettok();
     if (tok->tokentype == RESERVED) {
-        /* the big switch */
         switch (tok->whichval + RESERVED_BIAS) {
             case BEGINBEGIN:
                 result = parsebegin(tok);
@@ -828,15 +1419,52 @@ TOKEN statement() {
             case REPEAT:
                 result = parserepeat(tok);
                 break;
+            case WHILE: {
+                TOKEN expr = parseexpr();
+                TOKEN dotok = gettok(); // consume DO
+                TOKEN stmt = statement();
+                result = makewhile(tok, expr, dotok, stmt);
+                break;
+            }
+            case GOTO: {
+                TOKEN labnum = gettok();
+                int i;
+                for (i = 0; i < nlabels; i++) {
+                    if (labeltable[i] == labnum->intval) {
+                        result = makegoto(labelvalues[i]);
+                        break;
+                    }
+                }
+                break;
+            }
         }
+    } else if (tok->tokentype == NUMBERTOK) {
+        // user label: 1492: statement
+        TOKEN colon = gettok(); // consume ":"
+        int i;
+        int internal = -1;
+        for (i = 0; i < nlabels; i++) {
+            if (labeltable[i] == tok->intval) {
+                internal = labelvalues[i];
+                break;
+            }
+        }
+        TOKEN labelnode = dolabel(makeintc(internal), colon, NULL);
+        TOKEN stmt = statement();
+        result = makeprogn(talloc(), nconc(labelnode, stmt));
     } else if (tok->tokentype == IDENTIFIERTOK) {
-        TOKEN next = peektok();
-
-        if (next->tokentype == OPERATOR &&
-            (next->whichval == ASSIGNOP || next->whichval + OPERATOR_BIAS == ASSIGNOP)) {
-            result = parseassign(findid(tok));  // variable assignment statement
+        tok = findid(tok);
+        if (tok->symentry != NULL && tok->symentry->kind == FUNCTIONSYM) {
+            result = parsefuncall(tok);
         } else {
-            result = parsefuncall(findid(tok));  // procedure/function call
+            tok = parsepostfix(tok);
+            TOKEN next = peektok();
+            if (next->tokentype == OPERATOR &&
+                (next->whichval == ASSIGNOP || next->whichval + OPERATOR_BIAS == ASSIGNOP)) {
+                result = parseassign(tok);
+            } else {
+                result = parsefuncall(tok);
+            }
         }
     }
 
@@ -883,16 +1511,39 @@ int yyparse() {
         yyerror("Expected ';' after program header");
     }
 
+    // label block: label 1492, 1776
+    tok = peektok();
+    if (reserved(tok, LABEL)) {
+        gettok(); // consume LABEL 
+        while (1) {
+            TOKEN num = gettok();
+            instlabel(num);
+            tok = peektok();
+            if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA)
+                gettok();
+            else break;
+        }
+        
+        tok = gettok(); // consume ;
+    }
+
     tok = peektok();
     if (reserved(tok, CONST)) {
-        gettok();  // consume CONST
+        gettok();
         parseconst();
+    }
+
+    // type block
+    tok = peektok();
+    if (reserved(tok, TYPE)) {
+        gettok();
+        parsetype();
     }
 
     tok = peektok();
     if (reserved(tok, VAR)) {
-        gettok();    // consume 'VAR'
-        parsevar();  // handle i, lim : integer;
+        gettok();
+        parsevar();
     }
 
     body = statement();
