@@ -506,10 +506,17 @@ TOKEN makewhile(TOKEN tok, TOKEN expr, TOKEN tokb, TOKEN statement) {
     TOKEN labeltok = dolabel(makeintc(label->intval), tok, NULL);
 
     TOKEN gototok = makegoto(label->intval);
-    TOKEN body = makeprogn(tokb, nconc(statement, gototok));
+
+    // explicitly link statement->goto w/o following statement's existing link chain
+    statement->link = gototok;
+    gototok->link = NULL;
+    TOKEN body = makeprogn(tokb, statement);
     TOKEN iftok = makeif(talloc(), expr, body, NULL);
 
-    return makeprogn(talloc(), nconc(labeltok, iftok));
+    labeltok->link = iftok;
+    iftok->link = NULL;
+
+    return makeprogn(talloc(), labeltok);
 }
 
 /* parsepostfix handles ^, ., and [] after an identifier/expression */
@@ -1514,17 +1521,24 @@ int yyparse() {
     // label block: label 1492, 1776
     tok = peektok();
     if (reserved(tok, LABEL)) {
-        gettok(); // consume LABEL 
+        gettok(); // consume LABEL
+        int userlabels[MAXLABELS];
+        int numlabels = 0;
         while (1) {
             TOKEN num = gettok();
-            instlabel(num);
+            userlabels[numlabels++] = num->intval;
             tok = peektok();
             if (tok->tokentype == DELIMITER && (tok->whichval + DELIMITER_BIAS) == COMMA)
                 gettok();
             else break;
         }
-        
         tok = gettok(); // consume ;
+        
+        // install in reverse order
+        for (int li = numlabels - 1; li >= 0; li--) {
+            TOKEN ltok = makeintc(userlabels[li]);
+            instlabel(ltok);
+        }
     }
 
     tok = peektok();
