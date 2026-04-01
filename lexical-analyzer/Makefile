@@ -34,7 +34,7 @@ lexasu:   lexasu.o
 # To compile starter file pars1.c --> pars1c
 #     using your file lexanc.c
 pars1c: pars1c.o lexanc.o scanner.o printtoken.o pprint.o symtab.o
-	cc -o pars1c pars1c.o lexanc.o scanner.o printtoken.o pprint.o symtab.o
+	cc -o pars1c pars1c.o lexanc.o scanner.o printtoken.o pprint.o symtab.o -lm
 
 # To compile your file parsc.c --> parsec
 #     using your file lexanc.c
